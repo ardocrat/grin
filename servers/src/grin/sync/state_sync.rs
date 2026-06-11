@@ -15,6 +15,7 @@
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use grin_p2p::PeerAddr;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::chain::{self, pibd_params, SyncState, SyncStatus};
@@ -258,36 +259,37 @@ impl StateSync {
 			.remove_stale_pibd_requests(pibd_params::SEGMENT_REQUEST_TIMEOUT_SECS);
 
 		if !stale_segments.is_empty() {
+			let stale_peers: HashSet<PeerAddr> = stale_segments
+				.iter()
+				.filter_map(|(_, peer_addr)| peer_addr.map(PeerAddr))
+				.collect();
+			for peer_addr in stale_peers {
+				let _ = self.peers.block_peer(peer_addr, "PIBD segment timeout");
+				let is_outbound = { self.peers.iter().outbound().by_addr(peer_addr).is_some() };
+				if is_outbound {
+					debug!("state_sync: disconnecting stale peer {}", peer_addr);
+					if let Err(e) = self
+						.peers
+						.disconnect_peer(peer_addr, "PIBD segment timeout")
+					{
+						debug!(
+							"state_sync: failed to disconnect timed-out peer {}: {:?}",
+							peer_addr, e
+						);
+					}
+				} else {
+					debug!(
+						"state_sync: peer {} is not outbound or not connected, do not disconnect",
+						peer_addr
+					);
+				}
+			}
 			for (seg_id, peer_addr) in stale_segments.iter() {
 				if let Some(peer_addr) = peer_addr {
-					let _ = self
-						.peers
-						.block_peer(PeerAddr(*peer_addr), "PIBD segment timeout");
 					debug!(
 						"state_sync: peer {} moved to PIBD retry exclusion list for segment {:?}",
 						peer_addr, seg_id
 					);
-					let is_outbound = {
-						self.peers
-							.iter()
-							.outbound()
-							.by_addr(PeerAddr(peer_addr.clone()))
-							.is_some()
-					};
-					if is_outbound {
-						debug!("state_sync: disconnecting peer {}", peer_addr);
-						if let Err(e) = self
-							.peers
-							.disconnect_peer(PeerAddr(*peer_addr), "PIBD segment timeout")
-						{
-							debug!(
-								"state_sync: failed to disconnect timed-out peer {}: {:?}",
-								peer_addr, e
-							);
-						}
-					} else {
-						debug!("state_sync: peer {} is not outbound or not connected, do not disconnect", peer_addr);
-					}
 				} else {
 					debug!(
 						"state_sync: PIBD request {:?} timed out without a recorded peer",
