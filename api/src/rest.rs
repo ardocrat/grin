@@ -32,9 +32,9 @@ use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{io, thread};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::Runtime;
-use tokio_rustls::TlsAcceptor;
+use tokio_rustls::{TlsAcceptor, TlsStream};
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Clone, Eq, PartialEq, Debug, thiserror::Error, Serialize, Deserialize)]
@@ -168,52 +168,7 @@ impl ApiServer {
 
 		thread::Builder::new()
 			.name("apis".to_string())
-			.spawn(move || {
-				let server = async move {
-					let graceful = hyper_util::server::graceful::GracefulShutdown::new();
-					// When this signal completes, start shutdown.
-					let mut signal = std::pin::pin!(shutdown_signal(rx));
-
-					// Start server loop.
-					match TcpListener::bind(addr).await {
-						Ok(l) => loop {
-							tokio::select! {
-								Ok(s) = async {
-									match l.accept().await {
-										Ok((s, _)) => Ok(s),
-										Err(e) => {
-											error!("Failed to accept connection: {e:#}");
-											Err(e)
-										}
-									}
-								} => {
-									let io = TokioIo::new(s);
-									let router = router.clone();
-									let conn = http1::Builder::new().serve_connection(io, router);
-									let fut = graceful.watch(conn);
-									tokio::spawn(async move {
-										if let Err(e) = fut.await {
-											error!("API server error: {:?}", e);
-										}
-									});
-								}
-								_ = &mut signal => {
-									drop(l);
-									break;
-								}
-							}
-						},
-						Err(e) => {
-							error!("API listener binding error: {}", e);
-						}
-					}
-				};
-
-				let rt = Runtime::new()
-					.map_err(|e| error!("HTTP API server error: {}", e))
-					.unwrap();
-				rt.block_on(server);
-			})
+			.spawn(move || start_server(addr, router, rx, None))
 			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()))
 	}
 
@@ -243,61 +198,7 @@ impl ApiServer {
 
 		thread::Builder::new()
 			.name("apis".to_string())
-			.spawn(move || {
-				let server = async move {
-					let graceful = hyper_util::server::graceful::GracefulShutdown::new();
-					// When this signal completes, start shutdown.
-					let mut signal = std::pin::pin!(shutdown_signal(rx));
-
-					// Start server loop.
-					match TcpListener::bind(addr).await {
-						Ok(l) => loop {
-							tokio::select! {
-								Ok(s) = async {
-									match l.accept().await {
-										Ok((s, _)) => Ok(s),
-										Err(e) => {
-											error!("Failed to accept connection: {e:#}");
-											Err(e)
-										}
-									}
-								} => {
-									let router = router.clone();
-									let tls_acceptor = tls_acceptor.clone();
-									let tls_stream = match tls_acceptor.accept(s).await {
-										Ok(tls_stream) => tls_stream,
-										Err(err) => {
-											error!("failed to perform TLS handshake: {err:#}");
-											continue;
-										}
-									};
-									let io = TokioIo::new(tls_stream);
-									let router = router.clone();
-									let conn = http1::Builder::new().serve_connection(io, router);
-									let fut = graceful.watch(conn);
-									tokio::spawn(async move {
-										if let Err(e) = fut.await {
-											error!("API server error: {:?}", e);
-										}
-									});
-								}
-								_ = &mut signal => {
-									drop(l);
-									break;
-								}
-							}
-						},
-						Err(e) => {
-							error!("API listener binding error: {}", e);
-						}
-					}
-				};
-
-				let rt = Runtime::new()
-					.map_err(|e| eprintln!("HTTP API server error: {}", e))
-					.unwrap();
-				rt.block_on(server);
-			})
+			.spawn(move || start_server(addr, router, rx, Some(tls_acceptor)))
 			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()))
 	}
 
@@ -322,6 +223,76 @@ impl ApiServer {
 			false
 		}
 	}
+}
+
+/// Start API server with optional TLS support.
+fn start_server(
+	addr: SocketAddr,
+	router: Router,
+	rx: &mut oneshot::Receiver<()>,
+	tls: Option<TlsAcceptor>,
+) {
+	let server = async move {
+		let graceful = hyper_util::server::graceful::GracefulShutdown::new();
+		// When this signal completes, start shutdown.
+		let mut signal = std::pin::pin!(shutdown_signal(rx));
+
+		// Start server loop.
+		match TcpListener::bind(addr).await {
+			Ok(l) => loop {
+				tokio::select! {
+					Ok(s) = async {
+						match l.accept().await {
+							Ok((s, _)) => Ok(s),
+							Err(e) => {
+								error!("Failed to accept connection: {e:#}");
+								Err(e)
+							}
+						}
+					} => {
+						if let Some(tls) = tls.clone() {
+							let tls_stream = match tls.accept(s).await {
+								Ok(tls_stream) => tls_stream,
+								Err(err) => {
+									error!("failed to perform TLS handshake: {err:#}");
+									continue;
+								}
+							};
+							let io = TokioIo::new(tls_stream);
+							let conn = http1::Builder::new().serve_connection(io, router.clone());
+							let fut = graceful.watch(conn);
+							tokio::spawn(async move {
+								if let Err(e) = fut.await {
+									error!("API TLS server error: {:?}", e);
+							}
+						});
+						} else {
+							let io = TokioIo::new(s);
+							let conn = http1::Builder::new().serve_connection(io, router.clone());
+							let fut = graceful.watch(conn);
+							tokio::spawn(async move {
+								if let Err(e) = fut.await {
+									error!("API HTTP server error: {:?}", e);
+								}
+							});
+						};
+					}
+					_ = &mut signal => {
+						drop(l);
+						break;
+					}
+				}
+			},
+			Err(e) => {
+				error!("API listener binding error: {}", e);
+			}
+		}
+	};
+
+	let rt = Runtime::new()
+		.map_err(|e| error!("HTTP API server error: {}", e))
+		.unwrap();
+	rt.block_on(server);
 }
 
 /// Signal for graceful API server shutdown.
