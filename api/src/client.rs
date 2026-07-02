@@ -222,7 +222,7 @@ where
 async fn send_request_async(req: Request<ApiBody>, timeout: TimeOut) -> Result<String, Error> {
 	let https = hyper_rustls::HttpsConnectorBuilder::new()
 		.with_native_roots()
-		.unwrap()
+		.map_err(|e| Error::RequestError(format!("{}", e)))?
 		.https_or_http()
 		.enable_http1()
 		.build();
