@@ -40,36 +40,32 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 /// Returns the list of event hooks that will be initialized for network events
-pub fn init_net_hooks(config: &ServerConfig) -> Vec<Box<dyn NetEvents + Send + Sync>> {
+pub fn init_net_hooks(
+	config: &ServerConfig,
+) -> Result<Vec<Box<dyn NetEvents + Send + Sync>>, Error> {
 	let mut list: Vec<Box<dyn NetEvents + Send + Sync>> = Vec::new();
 	list.push(Box::new(EventLogger));
 	if config.webhook_config.block_received_url.is_some()
 		|| config.webhook_config.tx_received_url.is_some()
 		|| config.webhook_config.header_received_url.is_some()
 	{
-		match WebHook::from_config(&config.webhook_config) {
-			Ok(wh) => list.push(Box::new(wh)),
-			Err(e) => {
-				error!("Can not create webhook: {:?}", e)
-			}
-		}
+		let wh = WebHook::from_config(&config.webhook_config)?;
+		list.push(Box::new(wh));
 	}
-	list
+	Ok(list)
 }
 
 /// Returns the list of event hooks that will be initialized for chain events
-pub fn init_chain_hooks(config: &ServerConfig) -> Vec<Box<dyn ChainEvents + Send + Sync>> {
+pub fn init_chain_hooks(
+	config: &ServerConfig,
+) -> Result<Vec<Box<dyn ChainEvents + Send + Sync>>, Error> {
 	let mut list: Vec<Box<dyn ChainEvents + Send + Sync>> = Vec::new();
 	list.push(Box::new(EventLogger));
 	if config.webhook_config.block_accepted_url.is_some() {
-		match WebHook::from_config(&config.webhook_config) {
-			Ok(wh) => list.push(Box::new(wh)),
-			Err(e) => {
-				error!("Can not create webhook: {:?}", e)
-			}
-		}
+		let wh = WebHook::from_config(&config.webhook_config)?;
+		list.push(Box::new(wh));
 	}
-	list
+	Ok(list)
 }
 
 #[allow(unused_variables)]
