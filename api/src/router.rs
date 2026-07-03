@@ -304,7 +304,6 @@ mod tests {
 	use futures::channel::oneshot;
 	use http_body_util::Full;
 	use std::net::SocketAddr;
-	use std::{thread, time};
 
 	struct HandlerImpl(u16);
 
@@ -367,7 +366,6 @@ mod tests {
 
 		let call_handler = |url| {
 			let res = client::get::<u16>(format!("http://{}{}", server_addr, url).as_str(), None);
-			thread::sleep(time::Duration::from_millis(500));
 			res.unwrap()
 		};
 
@@ -380,5 +378,6 @@ mod tests {
 		assert_eq!(call_handler("/v1/zzz/1"), 104);
 		assert_eq!(call_handler("/v1/zzz/2"), 104);
 		assert_eq!(call_handler("/v1/zzz/2/zzz"), 105);
+		server.stop();
 	}
 }
