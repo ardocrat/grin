@@ -133,7 +133,11 @@ impl PeerStore {
 		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
 		let mut batch = self.db.batch()?;
-		let key = p.addr.as_key();
+		let key = if p.flags == State::Banned {
+			p.addr.as_ban_key()
+		} else {
+			p.addr.as_key()
+		};
 		batch.put_ser(Some(PEER_PREFIX), key.as_bytes(), p)?;
 		batch.commit()
 	}
@@ -142,7 +146,11 @@ impl PeerStore {
 		let mut batch = self.db.batch()?;
 		for pd in p {
 			debug!("save_peers: {:?} marked {:?}", pd.addr, pd.flags);
-			let key = pd.addr.as_key();
+			let key = if pd.flags == State::Banned {
+				pd.addr.as_ban_key()
+			} else {
+				pd.addr.as_key()
+			};
 			batch.put_ser(Some(PEER_PREFIX), key.as_bytes(), &pd)?;
 		}
 		batch.commit()
@@ -153,6 +161,14 @@ impl PeerStore {
 		option_to_not_found(
 			self.db.get_ser(Some(PEER_PREFIX), key.as_bytes(), None),
 			|| format!("Peer at address: {}", peer_addr),
+		)
+	}
+
+	pub fn get_banned_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
+		let key = peer_addr.as_ban_key();
+		option_to_not_found(
+			self.db.get_ser(Some(PEER_PREFIX), key.as_bytes(), None),
+			|| format!("Banned peer at address: {}", peer_addr),
 		)
 	}
 
@@ -178,7 +194,15 @@ impl PeerStore {
 			peer.last_attempt = Utc::now().timestamp();
 		}
 
-		batch.put_ser(Some(PEER_PREFIX), key.as_bytes(), &peer)?;
+		let new_key = if new_state == State::Banned {
+			peer_addr.as_ban_key()
+		} else {
+			key.clone()
+		};
+		if new_key != key {
+			batch.delete(Some(PEER_PREFIX), key.as_bytes())?;
+		}
+		batch.put_ser(Some(PEER_PREFIX), new_key.as_bytes(), &peer)?;
 		batch.commit()
 	}
 
@@ -241,6 +265,14 @@ impl<'a> PeersIterBatch<'a> {
 		Ok(())
 	}
 
+	/// Delete a banned peer by provided address.
+	pub fn delete_banned_peer(mut self, peer_addr: PeerAddr) -> Result<(), Error> {
+		let key = peer_addr.as_ban_key();
+		self.db.delete(Some(PEER_PREFIX), key.as_bytes())?;
+		self.db.commit()?;
+		Ok(())
+	}
+
 	/// Deletes peers from the storage that satisfy some condition `predicate`
 	pub fn delete_peers<F>(mut self, predicate: F) -> Result<(), Error>
 	where
@@ -259,7 +291,11 @@ impl<'a> PeersIterBatch<'a> {
 		// Delete peers in single batch
 		if !to_remove.is_empty() {
 			for peer in to_remove {
-				let key = peer.addr.as_key();
+				let key = if peer.flags == State::Banned {
+					peer.addr.as_ban_key()
+				} else {
+					peer.addr.as_key()
+				};
 				self.db.delete(Some(PEER_PREFIX), key.as_bytes())?;
 			}
 			self.db.commit()?;

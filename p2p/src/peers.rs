@@ -149,7 +149,7 @@ impl Peers {
 	}
 
 	pub fn is_banned(&self, peer_addr: PeerAddr) -> bool {
-		if let Ok(peer) = self.store.get_peer(peer_addr) {
+		if let Ok(peer) = self.store.get_banned_peer(peer_addr) {
 			return peer.flags == State::Banned;
 		}
 		false
@@ -158,7 +158,7 @@ impl Peers {
 	/// Ban a peer, disconnecting it if we're currently connected
 	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
 		// Update the peer in peers db or save new if not found.
-		if self.exists_peer(peer_addr)? {
+		if !is_private_ip(&peer_addr.0.ip()) && self.exists_peer(peer_addr)? {
 			self.update_state(peer_addr, State::Banned)?;
 		} else {
 			self.save_peer(&PeerData {
@@ -196,12 +196,16 @@ impl Peers {
 	pub fn unban_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
 		debug!("unban_peer: peer {}", peer_addr);
 		// check if peer exist
-		self.get_peer(peer_addr)?;
+		self.store
+			.get_banned_peer(peer_addr)
+			.map_err(Error::Store)?;
 		if self.is_banned(peer_addr) {
 			// delete banned private peer
 			if is_private_ip(&peer_addr.0.ip()) {
 				let batch = self.store.iter_batch()?;
-				batch.delete_peer(peer_addr).map_err(|e| Error::Store(e))
+				batch
+					.delete_banned_peer(peer_addr)
+					.map_err(|e| Error::Store(e))
 			} else {
 				self.update_state(peer_addr, State::Healthy)
 			}

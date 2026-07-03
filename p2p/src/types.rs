@@ -349,6 +349,17 @@ impl PeerAddr {
 			format!("{}", self.0.ip())
 		}
 	}
+
+	/// Key used for stored ban entries.
+	pub fn as_ban_key(&self) -> String {
+		let ip = self.0.ip();
+		if let IpAddr::V6(ipv6) = ip {
+			if let Some(ipv4) = ipv6.to_ipv4_mapped() {
+				return format!("{}", ipv4);
+			}
+		}
+		format!("{}", ip)
+	}
 }
 
 /// Configuration for the peer-to-peer server.
