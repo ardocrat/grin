@@ -363,12 +363,12 @@ fn connect_to_seeds_and_peers(
 	let min_outbound = config.peer_min_preferred_outbound_count() as usize;
 	let allowed_peer_count = peer_addrs
 		.iter()
-		.filter(|addr| !peers_deny.as_slice().contains(addr))
+		.filter(|addr| !peers_deny.contains(addr))
 		.count();
 	if allowed_peer_count < min_outbound {
 		let mut allowed_peer_count = allowed_peer_count;
 		for addr in seed_addrs {
-			if !peers_deny.as_slice().contains(addr) && !peer_addrs.contains(addr) {
+			if !peers_deny.contains(addr) && !peer_addrs.contains(addr) {
 				peer_addrs.push(*addr);
 				allowed_peer_count += 1;
 			}
@@ -384,7 +384,7 @@ fn connect_to_seeds_and_peers(
 
 	// connect to this initial set of peer addresses (either seeds or from our local db).
 	for addr in peer_addrs {
-		if !peers_deny.as_slice().contains(&addr) {
+		if !peers_deny.contains(&addr) {
 			let _ = tx.send(addr);
 		}
 	}

@@ -100,7 +100,7 @@ fn peer_handshake() {
 	// Start peers and connect to check handshake, checking ping/pong exchange.
 	{
 		let (_, server) = p2p_server(test_dir, vec![], vec![], None);
-		let (peer_addr, _) = p2p_server(test_dir, vec![], vec![], Some(5000));
+		let (peer_addr, _) = p2p_server(test_dir, vec![], vec![], None);
 
 		let peer = server.connect(PeerAddr(peer_addr)).unwrap();
 
@@ -126,10 +126,13 @@ fn peer_handshake() {
 
 	// Start a server allowing connections from/to peer at "allow" list.
 	{
-		let allow_addr = PeerAddr("127.0.0.1:5002".parse().unwrap());
-		let (addr, server) = p2p_server(test_dir, vec![allow_addr], vec![], Some(5001));
+		let port = open_port();
+		let allow_port = open_port();
+		let other_port = open_port();
+		let allow_addr = PeerAddr(format!("127.0.0.1:{}", allow_port).parse().unwrap());
+		let (addr, server) = p2p_server(test_dir, vec![allow_addr], vec![], Some(port));
 
-		let (addr2, server2) = p2p_server(test_dir, vec![], vec![], Some(5002));
+		let (addr2, server2) = p2p_server(test_dir, vec![], vec![], Some(allow_port));
 
 		// Inbound connection test.
 		let peer = server2.connect(PeerAddr(addr)).unwrap();
@@ -160,7 +163,7 @@ fn peer_handshake() {
 		thread::sleep(time::Duration::from_secs(1));
 
 		// Block connections from/to peer not from "allow" list.
-		let (addr3, server3) = p2p_server(test_dir, vec![], vec![], Some(5003));
+		let (addr3, server3) = p2p_server(test_dir, vec![], vec![], Some(other_port));
 
 		assert!(server.connect(PeerAddr(addr3)).is_err());
 		assert!(server3.connect(PeerAddr(addr)).is_err());
@@ -169,10 +172,12 @@ fn peer_handshake() {
 
 	// Start a server to refuse peer from "deny" list.
 	{
-		let deny_addr = PeerAddr("127.0.0.1:5005".parse().unwrap());
-		let (addr, server) = p2p_server(test_dir, vec![], vec![deny_addr], Some(5004));
+		let port = open_port();
+		let deny_port = open_port();
+		let deny_addr = PeerAddr(format!("127.0.0.1:{}", deny_port).parse().unwrap());
+		let (addr, server) = p2p_server(test_dir, vec![], vec![deny_addr], Some(port));
 
-		let (addr2, server2) = p2p_server(test_dir, vec![], vec![], Some(5005));
+		let (addr2, server2) = p2p_server(test_dir, vec![], vec![], Some(deny_port));
 
 		// Inbound connection test.
 		assert!(server2.connect(PeerAddr(addr)).is_err());

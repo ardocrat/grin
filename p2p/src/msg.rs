@@ -574,14 +574,14 @@ impl PeerAddrs {
 	}
 
 	pub fn contains(&self, addr: &PeerAddr) -> bool {
-		self.peers.contains(addr)
+		self.peers.iter().any(|p| p.matches_filter(addr))
 	}
 
 	pub fn difference(&self, other: &[PeerAddr]) -> PeerAddrs {
 		let peers = self
 			.peers
 			.iter()
-			.filter(|x| !other.contains(x))
+			.filter(|x| !other.iter().any(|p| p.matches_filter(x)))
 			.cloned()
 			.collect();
 		PeerAddrs { peers }
