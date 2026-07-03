@@ -17,21 +17,21 @@
 //! configurable with either no peers, a user-defined list or a preset
 //! list of DNS records (the default).
 
-use chrono::prelude::{DateTime, Utc};
-use chrono::Duration;
-use p2p::{msg::PeerAddrs, P2PConfig};
-use rand::prelude::*;
-use std::collections::HashMap;
-use std::net::ToSocketAddrs;
-use std::sync::{mpsc, Arc};
-use std::{cmp, str, thread, time};
-
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::p2p;
 use crate::p2p::types::{PeerAddr, MAINNET_PEER_PORT, TESTNET_PEER_PORT};
 use crate::p2p::ChainAdapter;
 use crate::util::StopState;
+use chrono::prelude::{DateTime, Utc};
+use chrono::Duration;
+use grin_p2p::Peer;
+use p2p::{msg::PeerAddrs, P2PConfig};
+use rand::prelude::*;
+use std::collections::HashMap;
+use std::net::ToSocketAddrs;
+use std::sync::{mpsc, Arc};
+use std::{cmp, str, thread, time};
 
 /// DNS Seeds with contacts associated - Mainnet
 pub const MAINNET_DNS_SEEDS: &[&str] = &[
@@ -500,18 +500,19 @@ fn seed_list(config: &P2PConfig) -> Vec<PeerAddr> {
 				vec![]
 			}
 		},
-		p2p::Seeding::DNSSeed => default_dns_seeds(),
+		p2p::Seeding::DNSSeed => default_dns_seeds(config),
 		_ => vec![],
 	}
 }
 
-fn default_dns_seeds() -> Vec<PeerAddr> {
+fn default_dns_seeds(config: &P2PConfig) -> Vec<PeerAddr> {
 	let net_seeds = if global::is_testnet() {
 		TESTNET_DNS_SEEDS
 	} else {
 		MAINNET_DNS_SEEDS
 	};
 	resolve_dns_to_addrs(
+		config,
 		&net_seeds
 			.iter()
 			.map(|s| {
@@ -531,7 +532,7 @@ fn default_dns_seeds() -> Vec<PeerAddr> {
 }
 
 /// Convenience function to resolve dns addresses from DNS records
-pub fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
+pub fn resolve_dns_to_addrs(config: &P2PConfig, dns_records: &Vec<String>) -> Vec<PeerAddr> {
 	let mut addresses: Vec<PeerAddr> = vec![];
 	for dns in dns_records {
 		debug!("Retrieving addresses from dns {}", dns);
@@ -539,7 +540,9 @@ pub fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
 			Ok(addrs) => addresses.append(
 				&mut addrs
 					.map(PeerAddr)
-					.filter(|addr| !addresses.contains(addr))
+					.filter(|addr| {
+						!addresses.contains(addr) && Peer::is_denied(config, addr.clone())
+					})
 					.collect(),
 			),
 			Err(e) => debug!("Failed to resolve dns {:?} got error {:?}", dns, e),

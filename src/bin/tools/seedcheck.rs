@@ -48,6 +48,7 @@ impl From<grin_store::lmdb::Error> for SeedCheckError {
 	}
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SeedCheckResults {
 	pub mainnet: Vec<SeedCheckResult>,
@@ -131,7 +132,7 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 		eprintln!("Checking seed {}", s);
 		let mut seed_result = SeedCheckResult::default();
 		seed_result.url = s.to_string();
-		let resolved_dns_entries = resolve_dns_to_addrs(&vec![format!("{}:{}", s, port)]);
+		let resolved_dns_entries = resolve_dns_to_addrs(&config, &vec![format!("{}:{}", s, port)]);
 		if resolved_dns_entries.is_empty() {
 			info!("FAIL - No dns entries found for {}", s);
 			result.push(seed_result);
@@ -150,7 +151,6 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 				);
 				p.stop();
 				p.wait();
-				//info!("{:?}", p);
 				seed_result.success = true;
 				seed_result
 					.successful_attempts
