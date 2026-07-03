@@ -69,6 +69,41 @@ fn check_config_current_dir(path: &str) -> Option<PathBuf> {
 	None
 }
 
+#[derive(Deserialize)]
+struct ChainTypeConfig {
+	server: Option<ChainTypeServerConfig>,
+}
+
+#[derive(Deserialize)]
+struct ChainTypeServerConfig {
+	chain_type: Option<global::ChainTypes>,
+}
+
+fn read_config_chain_type(file_path: &PathBuf) -> Result<global::ChainTypes, ConfigError> {
+	let contents = fs::read_to_string(file_path)?;
+	let decoded: ChainTypeConfig = toml::from_str(&contents).map_err(|e| {
+		ConfigError::ParseError(file_path.to_str().unwrap().to_string(), format!("{}", e))
+	})?;
+	Ok(decoded
+		.server
+		.and_then(|server| server.chain_type)
+		.unwrap_or_default())
+}
+
+/// Determine the chain type before peer addresses are parsed
+pub fn initial_chain_type(
+	cli_chain_type: global::ChainTypes,
+	config_file_path: Option<&str>,
+) -> Result<global::ChainTypes, ConfigError> {
+	if let Some(path) = config_file_path {
+		return read_config_chain_type(&PathBuf::from(path));
+	}
+	if let Some(path) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
+		return read_config_chain_type(&path);
+	}
+	Ok(cli_chain_type)
+}
+
 /// Create file with api secret
 pub fn init_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	let mut api_secret_file = File::create(api_secret_path)?;
