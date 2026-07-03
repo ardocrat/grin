@@ -129,10 +129,10 @@ fn real_main() -> i32 {
 
 	// Load relevant config
 	match args.subcommand() {
-		// When the subscommand is 'server' take into account the 'config_file' flag
-		("server", Some(server_args)) => {
-			if let Some(_path) = server_args.value_of("config_file") {
-				node_config = Some(config::load_server_config(_path).unwrap_or_else(|e| {
+		// When the subcommand is 'server' take into account the 'config_file' flag
+		("server", Some(_)) => {
+			if let Some(path) = config_file_path {
+				node_config = Some(config::load_server_config(path).unwrap_or_else(|e| {
 					panic!("Error loading server configuration: {}", e);
 				}));
 			} else {
