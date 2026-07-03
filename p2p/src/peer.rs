@@ -35,8 +35,8 @@ use crate::msg::{
 };
 use crate::protocol::Protocol;
 use crate::types::{
-	is_private_ip, Capabilities, ChainAdapter, Error, HeaderSegmentAcceptance, NetAdapter,
-	P2PConfig, PeerAddr, PeerInfo, ReasonForBan, TxHashSetRead,
+	Capabilities, ChainAdapter, Error, HeaderSegmentAcceptance, NetAdapter, P2PConfig, PeerAddr,
+	PeerInfo, ReasonForBan, TxHashSetRead,
 };
 use crate::util::secp::pedersen::RangeProof;
 use chrono::prelude::{DateTime, Utc};
@@ -152,17 +152,8 @@ impl Peer {
 	}
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
-		// Check if IP and non-empty port of peers are equal.
-		let peer_filter = |p: &PeerAddr| {
-			let same_ip = p.0.ip() == peer_addr.0.ip();
-			if is_private_ip(&p.0.ip()) {
-				same_ip && (p.0.port() == peer_addr.0.port() || p.0.port() == 0)
-			} else {
-				same_ip
-			}
-		};
 		if let Some(ref denied) = config.peers_deny {
-			if denied.peers.iter().any(peer_filter) {
+			if denied.peers.iter().any(|p| p.matches_filter(&peer_addr)) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly denied",
 					peer_addr
@@ -171,7 +162,7 @@ impl Peer {
 			}
 		}
 		if let Some(ref allowed) = config.peers_allow {
-			return if allowed.peers.iter().any(peer_filter) {
+			return if allowed.peers.iter().any(|p| p.matches_filter(&peer_addr)) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly allowed",
 					peer_addr

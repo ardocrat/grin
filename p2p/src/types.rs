@@ -188,41 +188,7 @@ impl<'de> Visitor<'de> for PeerAddrs {
 		let mut peers = Vec::with_capacity(access.size_hint().unwrap_or(0));
 
 		while let Some(entry) = access.next_element::<&str>()? {
-			match SocketAddr::from_str(entry) {
-				// Try to parse IP address first
-				Ok(ip) => peers.push(PeerAddr(ip)),
-				// If that fails it's probably a DNS record
-				Err(e) => {
-					eprintln!(
-						"Address {} parse error, trying to resolve DNS: {}",
-						entry, e
-					);
-					let socket_addrs: Result<std::vec::IntoIter<SocketAddr>, M::Error> = {
-						match entry.to_socket_addrs() {
-							Ok(r) => Ok(r),
-							Err(_) => (
-								entry,
-								if global::is_testnet() {
-									TESTNET_PEER_PORT
-								} else {
-									MAINNET_PEER_PORT
-								},
-							)
-								.to_socket_addrs()
-								.map_err(|e| {
-									let err_msg =
-										format!("Unable to resolve DNS for {}: {}", entry, e);
-									eprintln!("{}", err_msg);
-									serde::de::Error::custom(err_msg)
-								}),
-						}
-					};
-					if let Ok(socket_addrs) = socket_addrs {
-						println!("resolved DNS for {:?}", socket_addrs);
-						peers.append(&mut socket_addrs.map(PeerAddr).collect());
-					}
-				}
-			}
+			peers.append(&mut parse_peer_addr(entry, false).map_err(serde::de::Error::custom)?);
 		}
 		Ok(PeerAddrs { peers })
 	}
@@ -235,6 +201,59 @@ impl<'de> Deserialize<'de> for PeerAddrs {
 	{
 		deserializer.deserialize_seq(PeerAddrs { peers: vec![] })
 	}
+}
+
+fn default_peer_port() -> u16 {
+	match global::get_chain_type() {
+		global::ChainTypes::Testnet => TESTNET_PEER_PORT,
+		global::ChainTypes::UserTesting => USERNET_PEER_PORT,
+		_ => MAINNET_PEER_PORT,
+	}
+}
+
+fn parse_peer_addr(entry: &str, private_ip_wildcard: bool) -> Result<Vec<PeerAddr>, String> {
+	match SocketAddr::from_str(entry) {
+		Ok(addr) => Ok(vec![PeerAddr(addr)]),
+		Err(e) => {
+			if let Ok(ip) = IpAddr::from_str(entry) {
+				let port = if private_ip_wildcard && is_private_ip(&ip) {
+					0
+				} else {
+					default_peer_port()
+				};
+				return Ok(vec![PeerAddr(SocketAddr::new(ip, port))]);
+			}
+
+			eprintln!(
+				"Address {} parse error, trying to resolve DNS: {}",
+				entry, e
+			);
+			let socket_addrs = match entry.to_socket_addrs() {
+				Ok(r) => r,
+				Err(_) => (entry, default_peer_port())
+					.to_socket_addrs()
+					.map_err(|e| {
+						let err_msg = format!("Unable to resolve DNS for {}: {}", entry, e);
+						eprintln!("{}", err_msg);
+						err_msg
+					})?,
+			};
+			println!("resolved DNS for {:?}", socket_addrs);
+			Ok(socket_addrs.map(PeerAddr).collect())
+		}
+	}
+}
+
+fn deserialize_peer_filters<'de, D>(deserializer: D) -> Result<Option<PeerAddrs>, D::Error>
+where
+	D: Deserializer<'de>,
+{
+	let entries = Vec::<String>::deserialize(deserializer)?;
+	let mut peers = Vec::with_capacity(entries.len());
+	for entry in entries {
+		peers.append(&mut parse_peer_addr(&entry, true).map_err(serde::de::Error::custom)?);
+	}
+	Ok(Some(PeerAddrs { peers }))
 }
 
 impl std::hash::Hash for PeerAddr {
@@ -329,15 +348,20 @@ impl fmt::Display for PeerAddr {
 		write!(f, "{}", self.0)
 	}
 }
+
+fn normalize_ip(ip: IpAddr) -> IpAddr {
+	if let IpAddr::V6(ipv6) = ip {
+		if let Some(ipv4) = ipv6.to_ipv4_mapped() {
+			return IpAddr::V4(ipv4);
+		}
+	}
+	ip
+}
+
 impl PeerAddr {
 	/// Convenient way of constructing a new peer address from an ip address.
 	pub fn from_ip(addr: IpAddr) -> PeerAddr {
-		let port = if global::is_testnet() {
-			TESTNET_PEER_PORT
-		} else {
-			MAINNET_PEER_PORT
-		};
-		PeerAddr(SocketAddr::new(addr, port))
+		PeerAddr(SocketAddr::new(addr, default_peer_port()))
 	}
 
 	/// If the ip is private then our key is "ip:port".
@@ -350,15 +374,18 @@ impl PeerAddr {
 		}
 	}
 
+	pub fn matches_filter(&self, peer_addr: &PeerAddr) -> bool {
+		let same_ip = normalize_ip(self.0.ip()) == normalize_ip(peer_addr.0.ip());
+		if is_private_ip(&self.0.ip()) {
+			same_ip && (self.0.port() == peer_addr.0.port() || self.0.port() == 0)
+		} else {
+			same_ip
+		}
+	}
+
 	/// Key used for stored ban entries.
 	pub fn as_ban_key(&self) -> String {
-		let ip = self.0.ip();
-		if let IpAddr::V6(ipv6) = ip {
-			if let Some(ipv4) = ipv6.to_ipv4_mapped() {
-				return format!("{}", ipv4);
-			}
-		}
-		format!("{}", ip)
+		format!("{}", normalize_ip(self.0.ip()))
 	}
 }
 
@@ -375,8 +402,10 @@ pub struct P2PConfig {
 	/// The list of seed nodes, if using Seeding as a seed type
 	pub seeds: Option<PeerAddrs>,
 
+	#[serde(default, deserialize_with = "deserialize_peer_filters")]
 	pub peers_allow: Option<PeerAddrs>,
 
+	#[serde(default, deserialize_with = "deserialize_peer_filters")]
 	pub peers_deny: Option<PeerAddrs>,
 
 	/// The list of preferred peers that we will try to connect to

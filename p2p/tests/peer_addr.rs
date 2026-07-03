@@ -83,4 +83,8 @@ fn test_peer_addr_hashing() {
 
 	let mapped_addr = PeerAddr("[::ffff:192.168.1.2]:8082".parse().unwrap());
 	assert_eq!(peer_addr1.as_ban_key(), mapped_addr.as_ban_key());
+
+	let deny_addr = PeerAddr("192.168.1.2:0".parse().unwrap());
+	assert!(deny_addr.matches_filter(&peer_addr2));
+	assert!(deny_addr.matches_filter(&mapped_addr));
 }
