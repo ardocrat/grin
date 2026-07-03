@@ -400,7 +400,10 @@ fn connect_to_allow_list(
 		let default_peers = PeerAddrs::default();
 		let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
 		let peers_allow = p.difference(peers_deny.as_slice());
-		for addr in peers_allow {
+		for mut addr in peers_allow {
+			if addr.0.port() == 0 {
+				addr = PeerAddr::from_ip(addr.0.ip());
+			}
 			if !peers.is_known(addr).unwrap_or(false) {
 				let _ = tx.send(addr);
 			}

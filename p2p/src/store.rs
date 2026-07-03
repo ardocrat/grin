@@ -19,7 +19,7 @@ use num::FromPrimitive;
 use rand::prelude::*;
 
 use crate::core::ser::{self, DeserializationMode, Readable, Reader, Writeable, Writer};
-use crate::types::{Capabilities, PeerAddr, ReasonForBan};
+use crate::types::{is_private_ip, Capabilities, PeerAddr, ReasonForBan};
 use grin_store::{self, option_to_not_found, Error};
 
 const DB_NAME: &str = "peer";
@@ -166,6 +166,15 @@ impl PeerStore {
 
 	pub fn get_banned_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
 		let key = peer_addr.as_ban_key();
+		let peer = option_to_not_found(
+			self.db.get_ser(Some(PEER_PREFIX), key.as_bytes(), None),
+			|| format!("Banned peer at address: {}", peer_addr),
+		);
+		if peer.is_ok() {
+			return peer;
+		}
+
+		let key = peer_addr.as_key();
 		option_to_not_found(
 			self.db.get_ser(Some(PEER_PREFIX), key.as_bytes(), None),
 			|| format!("Banned peer at address: {}", peer_addr),
@@ -203,6 +212,29 @@ impl PeerStore {
 			batch.delete(Some(PEER_PREFIX), key.as_bytes())?;
 		}
 		batch.put_ser(Some(PEER_PREFIX), new_key.as_bytes(), &peer)?;
+		batch.commit()
+	}
+
+	pub fn unban_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
+		let mut peer = self.get_banned_peer(peer_addr)?;
+		peer.flags = State::Healthy;
+		peer.last_attempt = Utc::now().timestamp();
+
+		let mut batch = self.db.batch()?;
+		let ban_key = peer_addr.as_ban_key();
+		let old_key = peer_addr.as_key();
+		let new_key = peer.addr.as_key();
+		let delete_only = is_private_ip(&peer.addr.0.ip());
+
+		if batch.exists(Some(PEER_PREFIX), ban_key.as_bytes())? {
+			batch.delete(Some(PEER_PREFIX), ban_key.as_bytes())?;
+		}
+		if old_key != ban_key && batch.exists(Some(PEER_PREFIX), old_key.as_bytes())? {
+			batch.delete(Some(PEER_PREFIX), old_key.as_bytes())?;
+		}
+		if !delete_only {
+			batch.put_ser(Some(PEER_PREFIX), new_key.as_bytes(), &peer)?;
+		}
 		batch.commit()
 	}
 
@@ -255,22 +287,6 @@ impl<'a> PeersIterBatch<'a> {
 			.map(|p| p.ok().unwrap())
 			.collect();
 		Ok(peers)
-	}
-
-	/// Delete a peer by provided address.
-	pub fn delete_peer(mut self, peer_addr: PeerAddr) -> Result<(), Error> {
-		let key = peer_addr.as_key();
-		self.db.delete(Some(PEER_PREFIX), key.as_bytes())?;
-		self.db.commit()?;
-		Ok(())
-	}
-
-	/// Delete a banned peer by provided address.
-	pub fn delete_banned_peer(mut self, peer_addr: PeerAddr) -> Result<(), Error> {
-		let key = peer_addr.as_ban_key();
-		self.db.delete(Some(PEER_PREFIX), key.as_bytes())?;
-		self.db.commit()?;
-		Ok(())
 	}
 
 	/// Deletes peers from the storage that satisfy some condition `predicate`

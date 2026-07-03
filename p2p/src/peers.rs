@@ -195,20 +195,8 @@ impl Peers {
 	/// Unban a peer, checks if it exists and banned then unban
 	pub fn unban_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
 		debug!("unban_peer: peer {}", peer_addr);
-		// check if peer exist
-		self.store
-			.get_banned_peer(peer_addr)
-			.map_err(Error::Store)?;
 		if self.is_banned(peer_addr) {
-			// delete banned private peer
-			if is_private_ip(&peer_addr.0.ip()) {
-				let batch = self.store.iter_batch()?;
-				batch
-					.delete_banned_peer(peer_addr)
-					.map_err(|e| Error::Store(e))
-			} else {
-				self.update_state(peer_addr, State::Healthy)
-			}
+			self.store.unban_peer(peer_addr).map_err(Error::Store)
 		} else {
 			Err(Error::PeerNotBanned)
 		}
@@ -400,7 +388,7 @@ impl Peers {
 						"clean_peers {:?}, abusive ({} sent, {} recv)",
 						peer.info.addr, sent, received,
 					);
-					let _ = self.update_state(peer.info.addr, State::Banned);
+					let _ = self.ban_peer(peer.info.addr, ReasonForBan::None);
 					rm.push(peer.info.addr.clone());
 				} else {
 					let (stuck, diff) = peer.is_stuck();
@@ -927,11 +915,7 @@ impl NetAdapter for Peers {
 	}
 
 	fn is_banned(&self, addr: PeerAddr) -> bool {
-		if let Ok(peer) = self.get_peer(addr) {
-			peer.flags == State::Banned
-		} else {
-			false
-		}
+		Peers::is_banned(self, addr)
 	}
 }
 

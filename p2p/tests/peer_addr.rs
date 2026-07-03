@@ -79,12 +79,18 @@ fn test_peer_addr_hashing() {
 
 	// Check they are treated as not the same even though their underlying ports are different.
 	assert_ne!(peer_addr1, peer_addr2);
+	assert_eq!(peer_addr1.as_key(), "192.168.1.2:8080");
 	assert_eq!(peer_addr1.as_ban_key(), peer_addr2.as_ban_key());
 
 	let mapped_addr = PeerAddr("[::ffff:192.168.1.2]:8082".parse().unwrap());
+	assert_eq!(mapped_addr.as_key(), "192.168.1.2:8082");
 	assert_eq!(peer_addr1.as_ban_key(), mapped_addr.as_ban_key());
 
 	let deny_addr = PeerAddr("192.168.1.2:0".parse().unwrap());
 	assert!(deny_addr.matches_filter(&peer_addr2));
 	assert!(deny_addr.matches_filter(&mapped_addr));
+
+	let public_addr = PeerAddr("185.147.152.14:8080".parse().unwrap());
+	let mapped_public_addr = PeerAddr("[::ffff:185.147.152.14]:8081".parse().unwrap());
+	assert_eq!(public_addr.as_key(), mapped_public_addr.as_key());
 }

@@ -188,7 +188,10 @@ impl<'de> Visitor<'de> for PeerAddrs {
 		let mut peers = Vec::with_capacity(access.size_hint().unwrap_or(0));
 
 		while let Some(entry) = access.next_element::<&str>()? {
-			peers.append(&mut parse_peer_addr(entry, false).map_err(serde::de::Error::custom)?);
+			match parse_peer_addr(entry, false, false) {
+				Ok(mut addrs) => peers.append(&mut addrs),
+				Err(e) => eprintln!("Skipping peer address {}: {}", entry, e),
+			}
 		}
 		Ok(PeerAddrs { peers })
 	}
@@ -211,7 +214,11 @@ fn default_peer_port() -> u16 {
 	}
 }
 
-fn parse_peer_addr(entry: &str, private_ip_wildcard: bool) -> Result<Vec<PeerAddr>, String> {
+fn parse_peer_addr(
+	entry: &str,
+	private_ip_wildcard: bool,
+	strict_dns: bool,
+) -> Result<Vec<PeerAddr>, String> {
 	match SocketAddr::from_str(entry) {
 		Ok(addr) => Ok(vec![PeerAddr(addr)]),
 		Err(e) => {
@@ -224,22 +231,30 @@ fn parse_peer_addr(entry: &str, private_ip_wildcard: bool) -> Result<Vec<PeerAdd
 				return Ok(vec![PeerAddr(SocketAddr::new(ip, port))]);
 			}
 
-			eprintln!(
-				"Address {} parse error, trying to resolve DNS: {}",
-				entry, e
-			);
 			let socket_addrs = match entry.to_socket_addrs() {
 				Ok(r) => r,
 				Err(_) => (entry, default_peer_port())
 					.to_socket_addrs()
 					.map_err(|e| {
-						let err_msg = format!("Unable to resolve DNS for {}: {}", entry, e);
-						eprintln!("{}", err_msg);
-						err_msg
+						let err = format!("Unable to resolve DNS for {}: {}", entry, e);
+						if strict_dns {
+							eprintln!("{}", err);
+						}
+						err
 					})?,
 			};
-			println!("resolved DNS for {:?}", socket_addrs);
-			Ok(socket_addrs.map(PeerAddr).collect())
+			let addrs: Vec<_> = socket_addrs.map(PeerAddr).collect();
+			if addrs.is_empty() && strict_dns {
+				let err = format!("Unable to resolve DNS for {}", entry);
+				eprintln!("{}", err);
+				Err(err)
+			} else {
+				debug!(
+					"Resolved peer address {} after socket parse error: {}",
+					entry, e
+				);
+				Ok(addrs)
+			}
 		}
 	}
 }
@@ -251,7 +266,7 @@ where
 	let entries = Vec::<String>::deserialize(deserializer)?;
 	let mut peers = Vec::with_capacity(entries.len());
 	for entry in entries {
-		peers.append(&mut parse_peer_addr(&entry, true).map_err(serde::de::Error::custom)?);
+		peers.append(&mut parse_peer_addr(&entry, true, true).map_err(serde::de::Error::custom)?);
 	}
 	Ok(Some(PeerAddrs { peers }))
 }
@@ -367,10 +382,11 @@ impl PeerAddr {
 	/// If the ip is private then our key is "ip:port".
 	/// Otherwise, we only care about the ip (we disallow multiple peers on the same ip address).
 	pub fn as_key(&self) -> String {
-		if is_private_ip(&self.0.ip()) {
-			format!("{}:{}", self.0.ip(), self.0.port())
+		let ip = normalize_ip(self.0.ip());
+		if is_private_ip(&ip) {
+			format!("{}:{}", ip, self.0.port())
 		} else {
-			format!("{}", self.0.ip())
+			format!("{}", ip)
 		}
 	}
 
@@ -383,7 +399,7 @@ impl PeerAddr {
 		}
 	}
 
-	/// Key used for stored ban entries.
+	/// Ban entries are IP-wide so pre-handshake checks do not depend on source ports.
 	pub fn as_ban_key(&self) -> String {
 		format!("{}", normalize_ip(self.0.ip()))
 	}
