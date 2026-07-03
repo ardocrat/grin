@@ -125,7 +125,6 @@ fn real_main() -> i32 {
 
 	// Initialize our global chain_type.
 	global::init_global_chain_type(chain_type);
-	global::set_local_chain_type(chain_type);
 
 	// Load relevant config
 	match args.subcommand() {
