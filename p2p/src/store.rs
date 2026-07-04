@@ -158,10 +158,18 @@ impl PeerStore {
 
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
 		let key = peer_addr.as_key();
-		option_to_not_found(
+		let peer = option_to_not_found(
 			self.db.get_ser(Some(PEER_PREFIX), key.as_bytes(), None),
 			|| format!("Peer at address: {}", peer_addr),
-		)
+		);
+		if peer.is_ok() {
+			return peer;
+		}
+		let ban_key = peer_addr.as_ban_key();
+		if ban_key == key {
+			return peer;
+		}
+		self.get_banned_peer(peer_addr)
 	}
 
 	pub fn get_banned_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
@@ -183,7 +191,14 @@ impl PeerStore {
 
 	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
 		let key = peer_addr.as_key();
-		self.db.exists(Some(PEER_PREFIX), key.as_bytes())
+		if self.db.exists(Some(PEER_PREFIX), key.as_bytes())? {
+			return Ok(true);
+		}
+		let ban_key = peer_addr.as_ban_key();
+		if ban_key == key {
+			return Ok(false);
+		}
+		self.db.exists(Some(PEER_PREFIX), ban_key.as_bytes())
 	}
 
 	/// Convenience method to load a peer data, update its status and save it

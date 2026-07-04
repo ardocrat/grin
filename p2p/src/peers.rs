@@ -101,6 +101,14 @@ impl Peers {
 	/// Add a peer as banned to block future connections, usually due to failed
 	/// handshake
 	pub fn add_banned(&self, addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
+		// Avoid banning every local/LAN node behind the same private IP.
+		if is_private_ip(&addr.0.ip()) {
+			debug!(
+				"Not persisting pre-handshake ban for private peer {}.",
+				addr
+			);
+			return Ok(());
+		}
 		let peer_data = PeerData {
 			addr,
 			capabilities: Capabilities::UNKNOWN,

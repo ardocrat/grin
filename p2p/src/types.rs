@@ -188,7 +188,7 @@ impl<'de> Visitor<'de> for PeerAddrs {
 		let mut peers = Vec::with_capacity(access.size_hint().unwrap_or(0));
 
 		while let Some(entry) = access.next_element::<&str>()? {
-			match parse_peer_addr(entry, false, false) {
+			match parse_peer_addr(entry, false) {
 				Ok(mut addrs) => peers.append(&mut addrs),
 				Err(e) => eprintln!("Skipping peer address {}: {}", entry, e),
 			}
@@ -206,6 +206,7 @@ impl<'de> Deserialize<'de> for PeerAddrs {
 	}
 }
 
+// Portless entries use the current chain's default peer port.
 fn default_peer_port() -> u16 {
 	match global::get_chain_type() {
 		global::ChainTypes::Testnet => TESTNET_PEER_PORT,
@@ -214,11 +215,7 @@ fn default_peer_port() -> u16 {
 	}
 }
 
-fn parse_peer_addr(
-	entry: &str,
-	private_ip_wildcard: bool,
-	strict_dns: bool,
-) -> Result<Vec<PeerAddr>, String> {
+fn parse_peer_addr(entry: &str, private_ip_wildcard: bool) -> Result<Vec<PeerAddr>, String> {
 	match SocketAddr::from_str(entry) {
 		Ok(addr) => Ok(vec![PeerAddr(addr)]),
 		Err(e) => {
@@ -235,26 +232,14 @@ fn parse_peer_addr(
 				Ok(r) => r,
 				Err(_) => (entry, default_peer_port())
 					.to_socket_addrs()
-					.map_err(|e| {
-						let err = format!("Unable to resolve DNS for {}: {}", entry, e);
-						if strict_dns {
-							eprintln!("{}", err);
-						}
-						err
-					})?,
+					.map_err(|e| format!("Unable to resolve DNS for {}: {}", entry, e))?,
 			};
 			let addrs: Vec<_> = socket_addrs.map(PeerAddr).collect();
-			if addrs.is_empty() && strict_dns {
-				let err = format!("Unable to resolve DNS for {}", entry);
-				eprintln!("{}", err);
-				Err(err)
-			} else {
-				debug!(
-					"Resolved peer address {} after socket parse error: {}",
-					entry, e
-				);
-				Ok(addrs)
-			}
+			debug!(
+				"Resolved peer address {} after socket parse error: {}",
+				entry, e
+			);
+			Ok(addrs)
 		}
 	}
 }
@@ -266,7 +251,10 @@ where
 	let entries = Vec::<String>::deserialize(deserializer)?;
 	let mut peers = Vec::with_capacity(entries.len());
 	for entry in entries {
-		peers.append(&mut parse_peer_addr(&entry, true, true).map_err(serde::de::Error::custom)?);
+		match parse_peer_addr(&entry, true) {
+			Ok(mut addrs) => peers.append(&mut addrs),
+			Err(e) => eprintln!("Skipping peer filter address {}: {}", entry, e),
+		}
 	}
 	Ok(Some(PeerAddrs { peers }))
 }
@@ -390,6 +378,7 @@ impl PeerAddr {
 		}
 	}
 
+	/// Match this filter entry against a peer address.
 	pub fn matches_filter(&self, peer_addr: &PeerAddr) -> bool {
 		let same_ip = normalize_ip(self.0.ip()) == normalize_ip(peer_addr.0.ip());
 		if is_private_ip(&self.0.ip()) {

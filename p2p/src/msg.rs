@@ -573,10 +573,12 @@ impl PeerAddrs {
 		self.peers.as_slice()
 	}
 
+	/// Match using peer-filter rules, not exact set membership.
 	pub fn contains(&self, addr: &PeerAddr) -> bool {
 		self.peers.iter().any(|p| p.matches_filter(addr))
 	}
 
+	/// Difference using peer-filter rules.
 	pub fn difference(&self, other: &[PeerAddr]) -> PeerAddrs {
 		let peers = self
 			.peers

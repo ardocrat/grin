@@ -541,7 +541,7 @@ pub fn resolve_dns_to_addrs(config: &P2PConfig, dns_records: &Vec<String>) -> Ve
 				&mut addrs
 					.map(PeerAddr)
 					.filter(|addr| {
-						!addresses.contains(addr) && Peer::is_denied(config, addr.clone())
+						!addresses.contains(addr) && !Peer::is_denied(config, addr.clone())
 					})
 					.collect(),
 			),
@@ -550,4 +550,26 @@ pub fn resolve_dns_to_addrs(config: &P2PConfig, dns_records: &Vec<String>) -> Ve
 	}
 	debug!("Resolved addresses: {:?}", addresses);
 	addresses
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn resolve_dns_skips_denied_peers() {
+		let addr = PeerAddr("127.0.0.1:3414".parse().unwrap());
+		let dns_records = vec!["127.0.0.1:3414".to_string()];
+
+		let config = P2PConfig::default();
+		let addrs = resolve_dns_to_addrs(&config, &dns_records);
+		assert_eq!(addrs, vec![addr]);
+
+		let config = P2PConfig {
+			peers_deny: Some(PeerAddrs { peers: vec![addr] }),
+			..P2PConfig::default()
+		};
+		let addrs = resolve_dns_to_addrs(&config, &dns_records);
+		assert!(addrs.is_empty());
+	}
 }
