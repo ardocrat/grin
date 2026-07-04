@@ -136,7 +136,7 @@ impl PeerStore {
 		if let Ok((exists, key)) = self.exists_peer(p.addr) {
 			if exists {
 				let ip_key = p.addr.as_ip_key();
-				if ip_key == key {
+				if ip_key == key && is_private_ip(&p.addr.0.ip()) {
 					batch.delete(Some(PEER_PREFIX), ip_key.as_bytes())?;
 				}
 			}
