@@ -104,13 +104,9 @@ fn test_peer_addr_hashing() {
 	assert_eq!(public_addr.as_key(), mapped_public_addr.as_key());
 }
 
-#[test]
-fn test_peer_store_ban_key() {
-	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
-
+fn store_banned_peer(addr: PeerAddr) -> PeerStore {
 	let dir = tempdir().unwrap();
 	let store = PeerStore::new(dir.path().to_str().unwrap()).unwrap();
-	let addr = PeerAddr("192.168.1.5:3414".parse().unwrap());
 	let peer = p2p::PeerData {
 		addr,
 		capabilities: p2p::Capabilities::UNKNOWN,
@@ -123,18 +119,47 @@ fn test_peer_store_ban_key() {
 	};
 
 	store.save_peer(&peer).unwrap();
+	store
+}
+
+#[test]
+fn test_peer_store_private_ip_key() {
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+
+	let addr = PeerAddr("192.168.1.5:3414".parse().unwrap());
+	let store = store_banned_peer(addr);
 
 	assert!(store.exists_peer(addr).unwrap().0);
+	assert_eq!(store.exists_peer(addr).unwrap().1, addr.as_key());
 	assert_eq!(store.get_peer(addr).unwrap().0.flags, p2p::State::Banned);
-	assert_eq!(
-		store
-			.get_peer(PeerAddr("192.168.1.5:9999".parse().unwrap()))
+	assert!(
+		!store
+			.exists_peer(PeerAddr("192.168.1.5:9999".parse().unwrap()))
 			.unwrap()
 			.0
-			.flags,
-		p2p::State::Banned
 	);
 
 	store.unban_peer(addr).unwrap();
 	assert!(!store.exists_peer(addr).unwrap().0);
+}
+
+#[test]
+fn test_peer_store_public_ip_key() {
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+
+	let addr = PeerAddr("185.168.1.5:3414".parse().unwrap());
+	let store = store_banned_peer(addr);
+
+	assert!(store.exists_peer(addr).unwrap().0);
+	assert_eq!(store.exists_peer(addr).unwrap().1, addr.as_key());
+	assert_eq!(store.get_peer(addr).unwrap().0.flags, p2p::State::Banned);
+	assert!(
+		store
+			.exists_peer(PeerAddr("185.168.1.5:9999".parse().unwrap()))
+			.unwrap()
+			.0
+	);
+
+	store.unban_peer(addr).unwrap();
+	assert!(store.exists_peer(addr).unwrap().0);
 }

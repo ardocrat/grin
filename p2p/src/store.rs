@@ -177,7 +177,7 @@ impl PeerStore {
 		}
 		let peer = option_to_not_found(
 			self.db.get_ser(Some(PEER_PREFIX), ip_key.as_bytes(), None),
-			|| format!("Banned peer at address: {}", peer_addr),
+			|| format!("Peer at address: {}", peer_addr),
 		)?;
 		Ok((peer, ip_key))
 	}
