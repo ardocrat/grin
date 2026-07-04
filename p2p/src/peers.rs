@@ -157,7 +157,7 @@ impl Peers {
 	}
 
 	pub fn is_banned(&self, peer_addr: PeerAddr) -> bool {
-		if let Ok(peer) = self.store.get_banned_peer(peer_addr) {
+		if let Ok((peer, _)) = self.store.get_peer(peer_addr) {
 			return peer.flags == State::Banned;
 		}
 		false
@@ -337,12 +337,17 @@ impl Peers {
 
 	/// Get peer in store by address
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
-		self.store.get_peer(peer_addr).map_err(From::from)
+		let (p, _) = self.store.get_peer(peer_addr).map_err(|e| Error::from(e))?;
+		Ok(p)
 	}
 
 	/// Whether we've already seen a peer with the provided address
 	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
-		self.store.exists_peer(peer_addr).map_err(From::from)
+		let (e, _) = self
+			.store
+			.exists_peer(peer_addr)
+			.map_err(|e| Error::from(e))?;
+		Ok(e)
 	}
 
 	/// Saves updated information about a peer

@@ -133,84 +133,73 @@ impl PeerStore {
 		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
 		let mut batch = self.db.batch()?;
-		let key = if p.flags == State::Banned {
-			p.addr.as_ban_key()
-		} else {
-			p.addr.as_key()
-		};
-		batch.put_ser(Some(PEER_PREFIX), key.as_bytes(), p)?;
+		if let Ok((exists, key)) = self.exists_peer(p.addr) {
+			if exists {
+				let ip_key = p.addr.as_ip_key();
+				if ip_key == key {
+					batch.delete(Some(PEER_PREFIX), ip_key.as_bytes())?;
+				}
+			}
+		}
+		batch.put_ser(Some(PEER_PREFIX), p.addr.as_key().as_bytes(), p)?;
 		batch.commit()
 	}
 
 	pub fn save_peers(&self, p: Vec<&PeerData>) -> Result<(), Error> {
 		let mut batch = self.db.batch()?;
 		for pd in p {
-			debug!("save_peers: {:?} marked {:?}", pd.addr, pd.flags);
-			let key = if pd.flags == State::Banned {
-				pd.addr.as_ban_key()
+			if let Ok((peer, key)) = self.get_peer(pd.addr) {
+				let new_key = peer.addr.as_key();
+				if new_key != key {
+					batch.put_ser(Some(PEER_PREFIX), new_key.as_bytes(), &pd)?;
+					debug!("save_peers: {:?} marked {:?}", pd.addr, pd.flags);
+				}
 			} else {
-				pd.addr.as_key()
-			};
-			batch.put_ser(Some(PEER_PREFIX), key.as_bytes(), &pd)?;
+				batch.put_ser(Some(PEER_PREFIX), pd.addr.as_key().as_bytes(), &pd)?;
+				debug!("save_peers: {:?} marked {:?}", pd.addr, pd.flags);
+			}
 		}
 		batch.commit()
 	}
 
-	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
+	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<(PeerData, String), Error> {
 		let key = peer_addr.as_key();
 		let peer = option_to_not_found(
 			self.db.get_ser(Some(PEER_PREFIX), key.as_bytes(), None),
 			|| format!("Peer at address: {}", peer_addr),
 		);
 		if peer.is_ok() {
-			return peer;
+			return Ok((peer?, key));
 		}
-		let ban_key = peer_addr.as_ban_key();
-		if ban_key == key {
-			return peer;
+		let ip_key = peer_addr.as_ip_key();
+		if ip_key == key {
+			return Err(Error::NotFoundErr("Peer not found".to_string()));
 		}
-		self.get_banned_peer(peer_addr)
-	}
-
-	pub fn get_banned_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
-		let key = peer_addr.as_ban_key();
 		let peer = option_to_not_found(
-			self.db.get_ser(Some(PEER_PREFIX), key.as_bytes(), None),
+			self.db.get_ser(Some(PEER_PREFIX), ip_key.as_bytes(), None),
 			|| format!("Banned peer at address: {}", peer_addr),
-		);
-		if peer.is_ok() {
-			return peer;
-		}
-
-		let key = peer_addr.as_key();
-		option_to_not_found(
-			self.db.get_ser(Some(PEER_PREFIX), key.as_bytes(), None),
-			|| format!("Banned peer at address: {}", peer_addr),
-		)
+		)?;
+		Ok((peer, ip_key))
 	}
 
-	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
+	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<(bool, String), Error> {
 		let key = peer_addr.as_key();
 		if self.db.exists(Some(PEER_PREFIX), key.as_bytes())? {
-			return Ok(true);
+			return Ok((true, key));
 		}
-		let ban_key = peer_addr.as_ban_key();
-		if ban_key == key {
-			return Ok(false);
+		let ip_key = peer_addr.as_ip_key();
+		if ip_key == key {
+			return Ok((false, ip_key));
 		}
-		self.db.exists(Some(PEER_PREFIX), ban_key.as_bytes())
+		let exists = self.db.exists(Some(PEER_PREFIX), ip_key.as_bytes())?;
+		Ok((exists, ip_key))
 	}
 
 	/// Convenience method to load a peer data, update its status and save it
 	/// back. If new state is Banned its last banned time will be updated too.
 	/// If new state is Defunct last connection attempt will be updated too.
 	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
-		let mut batch = self.db.batch()?;
-		let key = peer_addr.as_key();
-		let mut peer = option_to_not_found(
-			batch.get_ser::<PeerData>(Some(PEER_PREFIX), key.as_bytes(), None),
-			|| format!("Peer at address: {}", peer_addr),
-		)?;
+		let (mut peer, key) = self.get_peer(peer_addr)?;
 		peer.flags = new_state;
 		if new_state == State::Banned {
 			peer.last_banned = Utc::now().timestamp();
@@ -218,11 +207,8 @@ impl PeerStore {
 			peer.last_attempt = Utc::now().timestamp();
 		}
 
-		let new_key = if new_state == State::Banned {
-			peer_addr.as_ban_key()
-		} else {
-			key.clone()
-		};
+		let mut batch = self.db.batch()?;
+		let new_key = peer_addr.as_key();
 		if new_key != key {
 			batch.delete(Some(PEER_PREFIX), key.as_bytes())?;
 		}
@@ -231,22 +217,15 @@ impl PeerStore {
 	}
 
 	pub fn unban_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
-		let mut peer = self.get_banned_peer(peer_addr)?;
+		let (mut peer, key) = self.get_peer(peer_addr)?;
 		peer.flags = State::Healthy;
 		peer.last_attempt = Utc::now().timestamp();
 
 		let mut batch = self.db.batch()?;
-		let ban_key = peer_addr.as_ban_key();
-		let old_key = peer_addr.as_key();
 		let new_key = peer.addr.as_key();
 		let delete_only = is_private_ip(&peer.addr.0.ip());
 
-		if batch.exists(Some(PEER_PREFIX), ban_key.as_bytes())? {
-			batch.delete(Some(PEER_PREFIX), ban_key.as_bytes())?;
-		}
-		if old_key != ban_key && batch.exists(Some(PEER_PREFIX), old_key.as_bytes())? {
-			batch.delete(Some(PEER_PREFIX), old_key.as_bytes())?;
-		}
+		batch.delete(Some(PEER_PREFIX), key.as_bytes())?;
 		if !delete_only {
 			batch.put_ser(Some(PEER_PREFIX), new_key.as_bytes(), &peer)?;
 		}
@@ -322,12 +301,13 @@ impl<'a> PeersIterBatch<'a> {
 		// Delete peers in single batch
 		if !to_remove.is_empty() {
 			for peer in to_remove {
-				let key = if peer.flags == State::Banned {
-					peer.addr.as_ban_key()
+				let key = peer.addr.as_key();
+				if self.db.exists(Some(PEER_PREFIX), key.as_bytes())? {
+					self.db.delete(Some(PEER_PREFIX), key.as_bytes())?;
 				} else {
-					peer.addr.as_key()
-				};
-				self.db.delete(Some(PEER_PREFIX), key.as_bytes())?;
+					let ip_key = peer.addr.as_ip_key();
+					self.db.delete(Some(PEER_PREFIX), ip_key.as_bytes())?;
+				}
 			}
 			self.db.commit()?;
 		}

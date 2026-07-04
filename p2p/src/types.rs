@@ -391,8 +391,8 @@ impl PeerAddr {
 		}
 	}
 
-	/// Ban entries are IP-wide so pre-handshake checks do not depend on source ports.
-	pub fn as_ban_key(&self) -> String {
+	/// Use key, ignoring port, used for banned pre-handshake peers.
+	pub fn as_ip_key(&self) -> String {
 		format!("{}", normalize_ip(self.0.ip()))
 	}
 }

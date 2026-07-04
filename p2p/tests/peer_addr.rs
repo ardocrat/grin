@@ -84,11 +84,11 @@ fn test_peer_addr_hashing() {
 	// Check they are treated as not the same even though their underlying ports are different.
 	assert_ne!(peer_addr1, peer_addr2);
 	assert_eq!(peer_addr1.as_key(), "192.168.1.2:8080");
-	assert_eq!(peer_addr1.as_ban_key(), peer_addr2.as_ban_key());
+	assert_eq!(peer_addr1.as_ip_key(), peer_addr2.as_ip_key());
 
 	let mapped_addr = PeerAddr("[::ffff:192.168.1.2]:8082".parse().unwrap());
 	assert_eq!(mapped_addr.as_key(), "192.168.1.2:8082");
-	assert_eq!(peer_addr1.as_ban_key(), mapped_addr.as_ban_key());
+	assert_eq!(peer_addr1.as_ip_key(), mapped_addr.as_ip_key());
 
 	let mapped_same_port = PeerAddr("[::ffff:192.168.1.2]:8080".parse().unwrap());
 	assert_eq!(peer_addr1, mapped_same_port);
@@ -124,16 +124,17 @@ fn test_peer_store_ban_key() {
 
 	store.save_peer(&peer).unwrap();
 
-	assert!(store.exists_peer(addr).unwrap());
-	assert_eq!(store.get_peer(addr).unwrap().flags, p2p::State::Banned);
+	assert!(store.exists_peer(addr).unwrap().0);
+	assert_eq!(store.get_peer(addr).unwrap().0.flags, p2p::State::Banned);
 	assert_eq!(
 		store
 			.get_peer(PeerAddr("192.168.1.5:9999".parse().unwrap()))
 			.unwrap()
+			.0
 			.flags,
 		p2p::State::Banned
 	);
 
 	store.unban_peer(addr).unwrap();
-	assert!(!store.exists_peer(addr).unwrap());
+	assert!(!store.exists_peer(addr).unwrap().0);
 }
