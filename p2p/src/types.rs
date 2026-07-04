@@ -263,10 +263,11 @@ impl std::hash::Hash for PeerAddr {
 	/// If private address then we care about ip and port.
 	/// If regular address then we only care about the ip and ignore the port.
 	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		if is_private_ip(&self.0.ip()) {
-			self.0.hash(state);
+		let ip = normalize_ip(self.0.ip());
+		if is_private_ip(&ip) {
+			SocketAddr::new(ip, self.0.port()).hash(state);
 		} else {
-			self.0.ip().hash(state);
+			ip.hash(state);
 		}
 	}
 }
@@ -275,10 +276,12 @@ impl PartialEq for PeerAddr {
 	/// If private address then we care about ip and port.
 	/// If regular address then we only care about the ip and ignore the port.
 	fn eq(&self, other: &PeerAddr) -> bool {
-		if is_private_ip(&self.0.ip()) {
-			self.0 == other.0
+		let ip = normalize_ip(self.0.ip());
+		let other_ip = normalize_ip(other.0.ip());
+		if is_private_ip(&ip) {
+			ip == other_ip && self.0.port() == other.0.port()
 		} else {
-			self.0.ip() == other.0.ip()
+			ip == other_ip
 		}
 	}
 }
