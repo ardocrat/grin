@@ -23,18 +23,6 @@ use hyper::{Request, StatusCode};
 use std::net::SocketAddr;
 use std::sync::Weak;
 
-#[allow(dead_code)]
-pub struct PeersAllHandler {
-	pub peers: Weak<p2p::Peers>,
-}
-
-impl Handler for PeersAllHandler {
-	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
-		let peers = &w_fut!(&self.peers).all_peer_data();
-		json_response_pretty(&peers)
-	}
-}
-
 pub struct PeersConnectedHandler {
 	pub peers: Weak<p2p::Peers>,
 }
