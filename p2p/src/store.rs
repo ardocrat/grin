@@ -149,8 +149,11 @@ impl PeerStore {
 		let mut batch = self.db.batch()?;
 		for pd in p {
 			if let Ok((peer, key)) = self.get_peer(pd.addr) {
-				let new_key = peer.addr.as_key();
-				if new_key != key {
+				if peer.flags == State::Defunct {
+					let new_key = peer.addr.as_key();
+					if new_key != key {
+						batch.delete(Some(PEER_PREFIX), key.as_bytes())?;
+					}
 					batch.put_ser(Some(PEER_PREFIX), new_key.as_bytes(), &pd)?;
 					debug!("save_peers: {:?} marked {:?}", pd.addr, pd.flags);
 				}
@@ -210,6 +213,7 @@ impl PeerStore {
 		let mut batch = self.db.batch()?;
 		let new_key = peer_addr.as_key();
 		if new_key != key {
+			peer.addr = peer_addr;
 			batch.delete(Some(PEER_PREFIX), key.as_bytes())?;
 		}
 		batch.put_ser(Some(PEER_PREFIX), new_key.as_bytes(), &peer)?;
