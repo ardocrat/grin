@@ -284,7 +284,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"seeding_type".to_string(),
 		"
-#All seeds/peers can be either IP address or DNS names. Port number must always be specified
+#All seeds/peers can be either IP address or DNS names
 #how to seed this server, can be None, List or DNSSeed
 "
 		.to_string(),
@@ -297,10 +297,11 @@ fn comments() -> HashMap<String, String> {
 #seeds = [\"192.168.0.1:3414\",\"192.168.0.2:3414\"]
 
 #hardcoded peer lists for allow/deny
-#will *only* connect to peers in allow list
-#peers_allow = [\"192.168.0.1:3414\", \"192.168.0.2:3414\"]
-#will *never* connect to peers in deny list
-#peers_deny = [\"192.168.0.3:3414\", \"192.168.0.4:3414\"]
+#will *only* connect to peers in allow list, use :0 to match any private port
+#unresolvable DNS names in allow/deny lists are skipped
+#peers_allow = [\"192.168.0.1:3414\", \"192.168.0.2:0\"]
+#will *never* connect to peers in deny list, use :0 to match any private port
+#peers_deny = [\"192.168.0.3:3414\", \"192.168.0.4:0\"]
 #a list of preferred peers to connect to
 #peers_preferred = [\"192.168.0.1:3414\",\"192.168.0.2:3414\"]
 

@@ -108,7 +108,7 @@ impl Peer {
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		debug!("accept: handshaking from {:?}", conn.peer_addr());
-		let info = hs.accept(capab, total_difficulty, &mut conn);
+		let info = hs.accept(capab, total_difficulty, &mut conn, &adapter);
 		match info {
 			Ok(info) => Ok(Peer::new(info, conn, adapter)?),
 			Err(e) => {
@@ -153,7 +153,7 @@ impl Peer {
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
 		if let Some(ref denied) = config.peers_deny {
-			if denied.peers.contains(&peer_addr) {
+			if denied.peers.iter().any(|p| p.matches_filter(&peer_addr)) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly denied",
 					peer_addr
@@ -162,19 +162,19 @@ impl Peer {
 			}
 		}
 		if let Some(ref allowed) = config.peers_allow {
-			if allowed.peers.contains(&peer_addr) {
+			return if allowed.peers.iter().any(|p| p.matches_filter(&peer_addr)) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly allowed",
 					peer_addr
 				);
-				return false;
+				false
 			} else {
 				debug!(
 					"checking peer allowed/denied: {:?} not explicitly allowed, denying",
 					peer_addr
 				);
-				return true;
-			}
+				true
+			};
 		}
 
 		// default to allowing peer connection if we do not explicitly allow or deny

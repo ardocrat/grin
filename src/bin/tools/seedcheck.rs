@@ -20,6 +20,7 @@ use grin_core::pow::Difficulty;
 use grin_core::{genesis, global};
 use grin_p2p as p2p;
 use grin_servers::{resolve_dns_to_addrs, MAINNET_DNS_SEEDS, TESTNET_DNS_SEEDS};
+use p2p::types::{MAINNET_PEER_PORT, TESTNET_PEER_PORT};
 use std::fs;
 use std::net::TcpStream;
 use std::path::PathBuf;
@@ -47,6 +48,7 @@ impl From<grin_store::lmdb::Error> for SeedCheckError {
 	}
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SeedCheckResults {
 	pub mainnet: Vec<SeedCheckResult>,
@@ -95,8 +97,8 @@ pub struct SeedCheckConnectAttempt {
 pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult> {
 	let mut result = vec![];
 	let (default_seeds, port) = match is_testnet {
-		true => (TESTNET_DNS_SEEDS, "13414"),
-		false => (MAINNET_DNS_SEEDS, "3414"),
+		true => (TESTNET_DNS_SEEDS, TESTNET_PEER_PORT),
+		false => (MAINNET_DNS_SEEDS, MAINNET_PEER_PORT),
 	};
 	let seeds = match seed {
 		Some(seed) => vec![seed],
@@ -130,7 +132,7 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 		eprintln!("Checking seed {}", s);
 		let mut seed_result = SeedCheckResult::default();
 		seed_result.url = s.to_string();
-		let resolved_dns_entries = resolve_dns_to_addrs(&vec![format!("{}:{}", s, port)]);
+		let resolved_dns_entries = resolve_dns_to_addrs(&config, &vec![format!("{}:{}", s, port)]);
 		if resolved_dns_entries.is_empty() {
 			info!("FAIL - No dns entries found for {}", s);
 			result.push(seed_result);
@@ -149,7 +151,6 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 				);
 				p.stop();
 				p.wait();
-				//info!("{:?}", p);
 				seed_result.success = true;
 				seed_result
 					.successful_attempts
