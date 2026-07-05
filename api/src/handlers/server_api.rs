@@ -25,21 +25,6 @@ use serde_json::json;
 use std::convert::TryInto;
 use std::sync::Weak;
 
-/// RESTful index of available api endpoints
-/// GET /v1/
-#[allow(dead_code)]
-pub struct IndexHandler {
-	pub list: Vec<String>,
-}
-
-impl IndexHandler {}
-
-impl Handler for IndexHandler {
-	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
-		json_response_pretty(&self.list)
-	}
-}
-
 /// Status handler. Post a summary of the server status
 /// GET /v1/status
 pub struct StatusHandler {
