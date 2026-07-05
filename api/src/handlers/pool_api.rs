@@ -19,7 +19,6 @@ use crate::core::ser::{self, DeserializationMode, ProtocolVersion};
 use crate::pool::{self, BlockChain, PoolAdapter, PoolEntry};
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
-use crate::types::*;
 use crate::util;
 use crate::util::RwLock;
 use crate::web::*;

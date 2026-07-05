@@ -32,7 +32,6 @@ use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{io, thread};
-use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 use tokio_rustls::TlsAcceptor;
@@ -290,10 +289,10 @@ fn start_server(
 				// Aso start a timeout to limit how long to wait.
 				tokio::select! {
 					_ = graceful.shutdown() => {
-						eprintln!("All connections gracefully closed");
+						warn!("API server gracefully stopped");
 					},
 					_ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
-						eprintln!("Timed out wait for all connections to close");
+						warn!("API server timed out wait for all connections to close");
 					}
 				}
 			}
