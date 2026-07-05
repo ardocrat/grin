@@ -574,7 +574,7 @@ impl PeerAddrs {
 	}
 
 	/// Match using peer-filter rules, not exact set membership.
-	pub fn contains(&self, addr: &PeerAddr) -> bool {
+	pub fn matches_addr(&self, addr: &PeerAddr) -> bool {
 		self.peers.iter().any(|p| p.matches_filter(addr))
 	}
 

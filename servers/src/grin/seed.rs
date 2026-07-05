@@ -262,7 +262,7 @@ fn monitor_peers(
 	for hp in healthy
 		.iter()
 		.filter(|p| {
-			!peers_deny.contains(&p.addr)
+			!peers_deny.matches_addr(&p.addr)
 				&& peers.get_connected_peer(p.addr).is_none()
 				&& (!enough_outbound
 					|| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
@@ -278,7 +278,7 @@ fn monitor_peers(
 	);
 	for upa in unknown
 		.iter()
-		.filter(|p| !peers_deny.contains(p))
+		.filter(|p| !peers_deny.matches_addr(p))
 		.choose_multiple(&mut thread_rng(), req_unk_count)
 	{
 		new_peers.push(*upa);
@@ -296,7 +296,7 @@ fn monitor_peers(
 	for dp in defuncts
 		.iter()
 		.filter(|p| {
-			!peers_deny.contains(&p.addr)
+			!peers_deny.matches_addr(&p.addr)
 				&& (!enough_outbound
 					|| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
 		})
@@ -308,7 +308,7 @@ fn monitor_peers(
 	// If the peer db is stale or mostly defunct, include seeds as recovery candidates.
 	if !enough_outbound {
 		for addr in seed_addrs {
-			if !peers_deny.contains(&addr) && !new_peers.contains(&addr) {
+			if !peers_deny.matches_addr(&addr) && !new_peers.contains(&addr) {
 				new_peers.push(*addr);
 			}
 		}
@@ -363,12 +363,12 @@ fn connect_to_seeds_and_peers(
 	let min_outbound = config.peer_min_preferred_outbound_count() as usize;
 	let allowed_peer_count = peer_addrs
 		.iter()
-		.filter(|addr| !peers_deny.contains(addr))
+		.filter(|addr| !peers_deny.matches_addr(addr))
 		.count();
 	if allowed_peer_count < min_outbound {
 		let mut allowed_peer_count = allowed_peer_count;
 		for addr in seed_addrs {
-			if !peers_deny.contains(addr) && !peer_addrs.contains(addr) {
+			if !peers_deny.matches_addr(addr) && !peer_addrs.contains(addr) {
 				peer_addrs.push(*addr);
 				allowed_peer_count += 1;
 			}
@@ -384,7 +384,7 @@ fn connect_to_seeds_and_peers(
 
 	// connect to this initial set of peer addresses (either seeds or from our local db).
 	for addr in peer_addrs {
-		if !peers_deny.contains(&addr) {
+		if !peers_deny.matches_addr(&addr) {
 			let _ = tx.send(addr);
 		}
 	}

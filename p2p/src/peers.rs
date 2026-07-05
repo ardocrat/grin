@@ -429,7 +429,7 @@ impl Peers {
 		if excess_outgoing_count > 0 {
 			let mut peer_infos: Vec<_> = outbound_peers()
 				.map(|x| x.info.clone())
-				.filter(|x| !preferred_peers.contains(&x.addr))
+				.filter(|x| !preferred_peers.matches_addr(&x.addr))
 				.collect();
 			peer_infos.sort_unstable_by_key(|x| x.total_difficulty());
 			let mut addrs = peer_infos
@@ -447,7 +447,7 @@ impl Peers {
 		let excess_incoming_count = inbound_peers().count().saturating_sub(max_inbound_count);
 		if excess_incoming_count > 0 {
 			let mut addrs: Vec<_> = inbound_peers()
-				.filter(|x| !preferred_peers.contains(&x.info.addr))
+				.filter(|x| !preferred_peers.matches_addr(&x.info.addr))
 				.take(excess_incoming_count)
 				.map(|x| x.info.addr)
 				.collect();
