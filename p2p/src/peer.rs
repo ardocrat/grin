@@ -108,7 +108,7 @@ impl Peer {
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		debug!("accept: handshaking from {:?}", conn.peer_addr());
-		let info = hs.accept(capab, total_difficulty, &mut conn);
+		let info = hs.accept(capab, total_difficulty, &mut conn, &adapter);
 		match info {
 			Ok(info) => Ok(Peer::new(info, conn, adapter)?),
 			Err(e) => {
