@@ -27,32 +27,6 @@ use hyper::body::Incoming;
 use hyper::{Request, StatusCode};
 use std::sync::Weak;
 
-/// Get basic information about the transaction pool.
-/// GET /v1/pool
-#[allow(dead_code)]
-pub struct PoolInfoHandler<B, P>
-where
-	B: BlockChain,
-	P: PoolAdapter,
-{
-	pub tx_pool: Weak<RwLock<pool::TransactionPool<B, P>>>,
-}
-
-impl<B, P> Handler for PoolInfoHandler<B, P>
-where
-	B: BlockChain,
-	P: PoolAdapter,
-{
-	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
-		let pool_arc = w_fut!(&self.tx_pool);
-		let pool = pool_arc.read();
-
-		json_response(&PoolInfo {
-			pool_size: pool.total_size(),
-		})
-	}
-}
-
 pub struct PoolHandler<B, P>
 where
 	B: BlockChain,
