@@ -32,6 +32,7 @@ use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{io, thread};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 use tokio_rustls::TlsAcceptor;
@@ -239,50 +240,63 @@ fn start_server(
 
 		// Start server loop.
 		match TcpListener::bind(addr).await {
-			Ok(l) => loop {
-				tokio::select! {
-					Ok(s) = async {
-						match l.accept().await {
-							Ok((s, _)) => Ok(s),
-							Err(e) => {
-								error!("Failed to accept connection: {e:#}");
-								Err(e)
-							}
-						}
-					} => {
-						if let Some(tls) = tls.clone() {
-							let tls_stream = match tls.accept(s).await {
-								Ok(tls_stream) => tls_stream,
-								Err(err) => {
-									error!("failed to perform TLS handshake: {err:#}");
-									continue;
+			Ok(l) => {
+				loop {
+					tokio::select! {
+						Ok(s) = async {
+							match l.accept().await {
+								Ok((s, _)) => Ok(s),
+								Err(e) => {
+									error!("Failed to accept connection: {e:#}");
+									Err(e)
 								}
-							};
-							let io = TokioIo::new(tls_stream);
-							let conn = http1::Builder::new().serve_connection(io, router.clone());
-							let fut = graceful.watch(conn);
-							tokio::spawn(async move {
-								if let Err(e) = fut.await {
-									error!("API TLS server error: {:?}", e);
 							}
-						});
-						} else {
-							let io = TokioIo::new(s);
-							let conn = http1::Builder::new().serve_connection(io, router.clone());
-							let fut = graceful.watch(conn);
-							tokio::spawn(async move {
-								if let Err(e) = fut.await {
-									error!("API HTTP server error: {:?}", e);
+						} => {
+							if let Some(tls) = tls.clone() {
+								let tls_stream = match tls.accept(s).await {
+									Ok(tls_stream) => tls_stream,
+									Err(err) => {
+										error!("failed to perform TLS handshake: {err:#}");
+										continue;
+									}
+								};
+								let io = TokioIo::new(tls_stream);
+								let conn = http1::Builder::new().serve_connection(io, router.clone());
+								let fut = graceful.watch(conn);
+								tokio::spawn(async move {
+									if let Err(e) = fut.await {
+										error!("API TLS server error: {:?}", e);
 								}
 							});
-						};
-					}
-					_ = &mut signal => {
-						drop(l);
-						break;
+							} else {
+								let io = TokioIo::new(s);
+								let conn = http1::Builder::new().serve_connection(io, router.clone());
+								let fut = graceful.watch(conn);
+								tokio::spawn(async move {
+									if let Err(e) = fut.await {
+										error!("API HTTP server error: {:?}", e);
+									}
+								});
+							};
+						}
+						_ = &mut signal => {
+							drop(l);
+							break;
+						}
 					}
 				}
-			},
+
+				// Now start the shutdown and wait for them to complete
+				// Aso start a timeout to limit how long to wait.
+				tokio::select! {
+					_ = graceful.shutdown() => {
+						eprintln!("All connections gracefully closed");
+					},
+					_ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+						eprintln!("Timed out wait for all connections to close");
+					}
+				}
+			}
 			Err(e) => {
 				error!("API listener binding error: {}", e);
 			}
