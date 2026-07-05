@@ -243,41 +243,43 @@ fn start_server(
 			Ok(l) => {
 				loop {
 					tokio::select! {
-						Ok(s) = async {
+						Ok(()) = async {
+							Ok::<(), Error>(())
+						} => {
 							match l.accept().await {
-								Ok((s, _)) => Ok(s),
+								Ok((s, _)) => {
+									if let Some(tls) = tls.clone() {
+										let tls_stream = match tls.accept(s).await {
+											Ok(tls_stream) => tls_stream,
+											Err(err) => {
+												error!("failed to perform TLS handshake: {err:#}");
+												continue;
+											}
+										};
+										let io = TokioIo::new(tls_stream);
+										let conn = http1::Builder::new().serve_connection(io, router.clone());
+										let fut = graceful.watch(conn);
+										tokio::spawn(async move {
+											if let Err(e) = fut.await {
+												error!("API TLS server error: {:?}", e);
+											}
+										});
+									} else {
+										let io = TokioIo::new(s);
+										let conn = http1::Builder::new().serve_connection(io, router.clone());
+										let fut = graceful.watch(conn);
+										tokio::spawn(async move {
+											if let Err(e) = fut.await {
+												error!("API HTTP server error: {:?}", e);
+											}
+										});
+									};
+								},
 								Err(e) => {
 									error!("Failed to accept connection: {e:#}");
-									Err(e)
+									continue;
 								}
 							}
-						} => {
-							if let Some(tls) = tls.clone() {
-								let tls_stream = match tls.accept(s).await {
-									Ok(tls_stream) => tls_stream,
-									Err(err) => {
-										error!("failed to perform TLS handshake: {err:#}");
-										continue;
-									}
-								};
-								let io = TokioIo::new(tls_stream);
-								let conn = http1::Builder::new().serve_connection(io, router.clone());
-								let fut = graceful.watch(conn);
-								tokio::spawn(async move {
-									if let Err(e) = fut.await {
-										error!("API TLS server error: {:?}", e);
-								}
-							});
-							} else {
-								let io = TokioIo::new(s);
-								let conn = http1::Builder::new().serve_connection(io, router.clone());
-								let fut = graceful.watch(conn);
-								tokio::spawn(async move {
-									if let Err(e) = fut.await {
-										error!("API HTTP server error: {:?}", e);
-									}
-								});
-							};
 						}
 						_ = &mut signal => {
 							drop(l);
