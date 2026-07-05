@@ -150,7 +150,7 @@ impl PeerStore {
 		for pd in p {
 			if let Ok((peer, key)) = self.get_peer(pd.addr) {
 				if peer.flags == State::Defunct {
-					let new_key = peer.addr.as_key();
+					let new_key = pd.addr.as_key();
 					if new_key != key {
 						batch.delete(Some(PEER_PREFIX), key.as_bytes())?;
 					}
