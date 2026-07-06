@@ -31,10 +31,13 @@ use rustls_pemfile as pemfile;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::{io, thread};
+use std::{io, thread, time::Duration};
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 use tokio_rustls::TlsAcceptor;
+
+const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Clone, Eq, PartialEq, Debug, thiserror::Error, Serialize, Deserialize)]
@@ -252,18 +255,25 @@ fn start_server(
 						} => {
 							if let Some(s) = s {
 								if let Some(tls) = tls.clone() {
-									let tls_stream = match tls.accept(s).await {
-										Ok(tls_stream) => tls_stream,
-										Err(err) => {
-											error!("failed to perform TLS handshake: {err:#}");
-											continue;
-										}
-									};
-									let io = TokioIo::new(tls_stream);
-									let conn = http1::Builder::new().serve_connection(io, router.clone());
-									let fut = graceful.watch(conn);
+									let router = router.clone();
+									let watcher = graceful.watcher();
 									tokio::spawn(async move {
-										if let Err(e) = fut.await {
+										let handshake =
+											tokio::time::timeout(TLS_HANDSHAKE_TIMEOUT, tls.accept(s));
+										let tls_stream = match handshake.await {
+											Ok(Ok(tls_stream)) => tls_stream,
+											Ok(Err(err)) => {
+												error!("failed to perform TLS handshake: {err:#}");
+												return;
+											}
+											Err(_) => {
+												error!("TLS handshake timed out");
+												return;
+											}
+										};
+										let io = TokioIo::new(tls_stream);
+										let conn = http1::Builder::new().serve_connection(io, router);
+										if let Err(e) = watcher.watch(conn).await {
 											error!("API TLS server error: {:?}", e);
 										}
 									});
@@ -294,7 +304,7 @@ fn start_server(
 					_ = graceful.shutdown() => {
 						warn!("API server gracefully stopped");
 					},
-					_ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+					_ = tokio::time::sleep(GRACEFUL_SHUTDOWN_TIMEOUT) => {
 						warn!("API server timed out wait for all connections to close");
 					}
 				}

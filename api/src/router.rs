@@ -22,7 +22,6 @@ use hyper::{Method, Request, Response, StatusCode};
 use std::collections::hash_map::DefaultHasher;
 use std::convert::Infallible;
 use std::hash::{Hash, Hasher};
-use std::net::TcpListener;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -304,7 +303,7 @@ mod tests {
 	use crate::{client, ApiServer};
 	use futures::channel::oneshot;
 	use http_body_util::Full;
-	use std::net::SocketAddr;
+	use std::net::{SocketAddr, TcpListener};
 
 	struct HandlerImpl(u16);
 
