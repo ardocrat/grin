@@ -5,7 +5,7 @@ use crate::api::*;
 use futures::channel::oneshot;
 use hyper::body::Incoming;
 use hyper::{Request, StatusCode};
-use std::net::SocketAddr;
+use std::net::{SocketAddr, TcpListener};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{thread, time};
@@ -63,6 +63,14 @@ fn build_router() -> Router {
 	router
 }
 
+fn open_port(host: &str) -> u16 {
+	// use port 0 to allow the OS to assign an open port
+	// TcpListener's Drop impl will unbind the port as soon as
+	// listener goes out of scope
+	let listener = TcpListener::bind(format!("{}:0", host)).unwrap();
+	listener.local_addr().unwrap().port()
+}
+
 #[test]
 fn test_start_api() {
 	util::init_test_logger();
@@ -71,7 +79,9 @@ fn test_start_api() {
 	let counter = Arc::new(CounterMiddleware::new());
 	// add middleware to the root
 	router.add_middleware(counter.clone());
-	let server_addr = "127.0.0.1:14434";
+	let server_host = "127.0.0.1";
+	let server_port = open_port(server_host);
+	let server_addr = format!("{}:{}", server_host, server_port);
 	let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
 	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
 		Box::leak(Box::new(oneshot::channel::<()>()));
@@ -98,7 +108,9 @@ fn test_start_api_tls() {
 	);
 	let mut server = ApiServer::new();
 	let router = build_router();
-	let server_addr = "0.0.0.0:14444";
+	let server_host = "0.0.0.0";
+	let server_port = open_port(server_host);
+	let server_addr = format!("{}:{}", server_host, server_port);
 	let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
 	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
 		Box::leak(Box::new(oneshot::channel::<()>()));

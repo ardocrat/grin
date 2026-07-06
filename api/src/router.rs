@@ -22,6 +22,7 @@ use hyper::{Method, Request, Response, StatusCode};
 use std::collections::hash_map::DefaultHasher;
 use std::convert::Infallible;
 use std::hash::{Hash, Hasher};
+use std::net::TcpListener;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -320,6 +321,14 @@ mod tests {
 		}
 	}
 
+	fn open_port() -> u16 {
+		// use port 0 to allow the OS to assign an open port
+		// TcpListener's Drop impl will unbind the port as soon as
+		// listener goes out of scope
+		let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+		listener.local_addr().unwrap().port()
+	}
+
 	#[test]
 	fn test_add_route() {
 		let mut routes = Router::new();
@@ -358,7 +367,9 @@ mod tests {
 			.unwrap();
 
 		let mut server = ApiServer::new();
-		let server_addr = "127.0.0.1:14424";
+
+		let server_port = open_port();
+		let server_addr = format!("127.0.0.1:{}", server_port);
 		let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
 		let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
 			Box::leak(Box::new(oneshot::channel::<()>()));
