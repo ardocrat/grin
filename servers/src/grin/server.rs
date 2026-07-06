@@ -174,7 +174,7 @@ impl Server {
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
 			tx_pool.clone(),
-			init_chain_hooks(&config),
+			init_chain_hooks(&config)?,
 		));
 
 		let genesis = match config.chain_type {
@@ -222,7 +222,7 @@ impl Server {
 			shared_chain.clone(),
 			tx_pool.clone(),
 			config.clone(),
-			init_net_hooks(&config),
+			init_net_hooks(&config)?,
 		));
 
 		// Initialize our capabilities.
