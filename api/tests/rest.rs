@@ -73,6 +73,9 @@ fn open_port(host: &str) -> u16 {
 
 #[test]
 fn test_start_api() {
+	rustls::crypto::ring::default_provider()
+		.install_default()
+		.expect("Failed to install rustls crypto provider");
 	util::init_test_logger();
 	let mut server = ApiServer::new();
 	let mut router = build_router();
@@ -101,6 +104,9 @@ fn test_start_api() {
 #[ignore]
 #[test]
 fn test_start_api_tls() {
+	rustls::crypto::ring::default_provider()
+		.install_default()
+		.expect("Failed to install rustls crypto provider");
 	util::init_test_logger();
 	let tls_conf = TLSConfig::new(
 		"tests/fullchain.pem".to_string(),
