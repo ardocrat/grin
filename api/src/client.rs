@@ -258,7 +258,7 @@ async fn send_request_async(req: Request<ApiBody>, timeout: TimeOut) -> Result<S
 		.map_err(|e| Error::RequestError(format!("Cannot read response body: {}", e)))?;
 
 	let body = body_resp.to_bytes();
-	let body_text = String::from_utf8_lossy(body.to_vec().as_slice()).to_string();
+	let body_text = String::from_utf8_lossy(&body).to_string();
 	Ok(body_text)
 }
 

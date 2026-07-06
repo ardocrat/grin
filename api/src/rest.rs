@@ -222,7 +222,7 @@ impl ApiServer {
 				}
 			}
 		} else {
-			error!("Can't stop API server, it's not running or doesn't spport stop operation");
+			error!("Can't stop API server, it's not running or doesn't support stop operation");
 			false
 		}
 	}
@@ -299,7 +299,7 @@ fn start_server(
 				}
 
 				// Now start the shutdown and wait for them to complete
-				// Aso start a timeout to limit how long to wait.
+				// Also start a timeout to limit how long to wait.
 				tokio::select! {
 					_ = graceful.shutdown() => {
 						warn!("API server gracefully stopped");

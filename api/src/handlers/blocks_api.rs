@@ -222,7 +222,7 @@ impl BlockHandler {
 }
 
 /// Try to get hash from height, hash or output commit.
-pub fn parse_inputs(
+fn parse_inputs(
 	chain: &Weak<chain::Chain>,
 	height: Option<u64>,
 	hash: Option<Hash>,

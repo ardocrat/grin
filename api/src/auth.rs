@@ -124,7 +124,7 @@ impl Handler for BasicAuthURIMiddleware {
 	}
 }
 
-fn check_auth(req: &Request<Incoming>, api_basic_auth: &String) -> bool {
+fn check_auth(req: &Request<Incoming>, api_basic_auth: &str) -> bool {
 	if req.headers().contains_key(AUTHORIZATION) {
 		let req_auth = req.headers()[AUTHORIZATION].as_bytes();
 		let auth = api_basic_auth.as_bytes();
