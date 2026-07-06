@@ -31,9 +31,10 @@ use rustls_pemfile as pemfile;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::{io, thread, time::Duration};
+use std::{io, thread};
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
+use tokio::time::{sleep, timeout, Duration};
 use tokio_rustls::TlsAcceptor;
 
 const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -258,8 +259,7 @@ fn start_server(
 									let router = router.clone();
 									let watcher = graceful.watcher();
 									tokio::spawn(async move {
-										let handshake =
-											tokio::time::timeout(TLS_HANDSHAKE_TIMEOUT, tls.accept(s));
+										let handshake = timeout(TLS_HANDSHAKE_TIMEOUT, tls.accept(s));
 										let tls_stream = match handshake.await {
 											Ok(Ok(tls_stream)) => tls_stream,
 											Ok(Err(err)) => {
@@ -304,7 +304,7 @@ fn start_server(
 					_ = graceful.shutdown() => {
 						warn!("API server gracefully stopped");
 					},
-					_ = tokio::time::sleep(GRACEFUL_SHUTDOWN_TIMEOUT) => {
+					_ = sleep(GRACEFUL_SHUTDOWN_TIMEOUT) => {
 						warn!("API server timed out wait for all connections to close");
 					}
 				}
