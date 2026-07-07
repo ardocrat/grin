@@ -347,9 +347,7 @@ mod tests {
 
 	#[test]
 	fn test_get() {
-		rustls::crypto::ring::default_provider()
-			.install_default()
-			.expect("Failed to install rustls crypto provider");
+		let _ = rustls::crypto::ring::default_provider().install_default();
 		util::init_test_logger();
 		let mut routes = Router::new();
 		routes
