@@ -347,6 +347,7 @@ mod tests {
 
 	#[test]
 	fn test_get() {
+		let _ = rustls::crypto::ring::default_provider().install_default();
 		util::init_test_logger();
 		let mut routes = Router::new();
 		routes
