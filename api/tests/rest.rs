@@ -2,13 +2,13 @@ use grin_api as api;
 use grin_util as util;
 
 use crate::api::*;
-use futures::channel::oneshot;
 use hyper::body::Incoming;
 use hyper::{Request, StatusCode};
 use std::net::{SocketAddr, TcpListener};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{thread, time};
+use tokio::sync::mpsc;
 
 struct IndexHandler {
 	list: Vec<String>,
@@ -83,8 +83,7 @@ fn test_start_api() {
 	let server_port = open_port(server_host);
 	let server_addr = format!("{}:{}", server_host, server_port);
 	let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
-	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
-		Box::leak(Box::new(oneshot::channel::<()>()));
+	let api_chan = mpsc::channel::<()>(1);
 	assert!(server.start(addr, router, None, api_chan).is_ok());
 	let url = format!("http://{}/v1/", server_addr);
 	let index = request_with_retry(url.as_str()).unwrap();
@@ -112,8 +111,7 @@ fn test_start_api_tls() {
 	let server_port = open_port(server_host);
 	let server_addr = format!("{}:{}", server_host, server_port);
 	let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
-	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
-		Box::leak(Box::new(oneshot::channel::<()>()));
+	let api_chan = mpsc::channel::<()>(1);
 	assert!(server.start(addr, router, Some(tls_conf), api_chan).is_ok());
 	let index = request_with_retry("https://yourdomain.com:14444/v1/").unwrap();
 	assert_eq!(index.len(), 2);
