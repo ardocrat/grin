@@ -143,7 +143,6 @@ impl ApiServer {
 		conf: Option<TLSConfig>,
 		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 	) -> Result<thread::JoinHandle<()>, Error> {
-		let _ = rustls::crypto::ring::default_provider().install_default();
 		match conf {
 			Some(conf) => self.start_tls(addr, router, conf, api_chan),
 			None => self.start_no_tls(addr, router, api_chan),
@@ -198,6 +197,9 @@ impl ApiServer {
 		let tx = std::mem::replace(tx, m.0);
 		self.shutdown_sender = Some(tx);
 
+		rustls::crypto::ring::default_provider()
+			.install_default()
+			.map_err(|e| Error::Internal(format!("{:?}", e)))?;
 		let tls_acceptor = TlsAcceptor::from(conf.build_server_config()?);
 
 		thread::Builder::new()
