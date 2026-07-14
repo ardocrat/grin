@@ -121,7 +121,7 @@ where
 			loop {
 				thread::sleep(std::time::Duration::from_millis(100));
 				if stop_state.is_stopped() {
-					apis.stop();
+					let _ = apis.stop();
 					break;
 				}
 			}

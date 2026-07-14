@@ -163,11 +163,9 @@ impl ApiServer {
 	}
 
 	/// Stops the API server.
-	pub fn stop(&mut self) -> bool {
+	pub async fn stop(&mut self) -> bool {
 		if let Some(tx) = self.shutdown_sender.take() {
-			let rt = Runtime::new().unwrap();
-			let res = rt.block_on(tx.send(()));
-			match res {
+			match tx.send(()).await {
 				Ok(_) => {
 					info!("API server has been stopped");
 					true

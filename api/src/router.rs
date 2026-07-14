@@ -387,6 +387,6 @@ mod tests {
 		assert_eq!(call_handler("/v1/zzz/1"), 104);
 		assert_eq!(call_handler("/v1/zzz/2"), 104);
 		assert_eq!(call_handler("/v1/zzz/2/zzz"), 105);
-		server.stop();
+		let _ = server.stop();
 	}
 }

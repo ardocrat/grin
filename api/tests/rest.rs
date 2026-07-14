@@ -89,7 +89,10 @@ fn test_start_api() {
 	let index = request_with_retry(url.as_str()).unwrap();
 	assert_eq!(index.len(), 2);
 	assert_eq!(counter.value(), 1);
-	assert!(server.stop());
+	let rt = tokio::runtime::Runtime::new().unwrap();
+	rt.block_on(async {
+		assert!(server.stop().await);
+	});
 	thread::sleep(time::Duration::from_millis(1_000));
 }
 
@@ -115,7 +118,10 @@ fn test_start_api_tls() {
 	assert!(server.start(addr, router, Some(tls_conf), api_chan).is_ok());
 	let index = request_with_retry("https://yourdomain.com:14444/v1/").unwrap();
 	assert_eq!(index.len(), 2);
-	assert!(!server.stop());
+	let rt = tokio::runtime::Runtime::new().unwrap();
+	rt.block_on(async {
+		assert!(server.stop().await);
+	});
 }
 
 fn request_with_retry(url: &str) -> Result<Vec<String>, Error> {
