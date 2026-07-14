@@ -143,6 +143,8 @@ impl ApiServer {
 		conf: Option<TLSConfig>,
 		api_chan: (mpsc::Sender<()>, mpsc::Receiver<()>),
 	) -> Result<thread::JoinHandle<()>, Error> {
+		let _ = rustls::crypto::ring::default_provider().install_default();
+
 		if self.shutdown_sender.is_some() {
 			return Err(Error::Internal(
 				"Can't start HTTPS API server, it's running already".to_string(),
