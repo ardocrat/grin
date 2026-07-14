@@ -147,7 +147,7 @@ impl ApiServer {
 
 		if self.shutdown_sender.is_some() {
 			return Err(Error::Internal(
-				"Can't start HTTPS API server, it's running already".to_string(),
+				"Can't start API server, it's running already".to_string(),
 			));
 		}
 		self.shutdown_sender = Some(api_chan.0);
