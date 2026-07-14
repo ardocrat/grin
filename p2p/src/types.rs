@@ -76,6 +76,36 @@ const PEER_MIN_PREFERRED_OUTBOUND_COUNT: u32 = 8;
 /// than allowed by PEER_MAX_INBOUND_COUNT to encourage network bootstrapping.
 const PEER_LISTENER_BUFFER_COUNT: u32 = 8;
 
+/// Number of headers represented by one PIHD header segment.
+pub fn pihd_header_segment_capacity() -> u64 {
+	let id = SegmentIdentifier {
+		height: PIHD_HEADER_SEGMENT_HEIGHT,
+		idx: 0,
+	};
+	let capacity = id.segment_capacity();
+	debug_assert_eq!(capacity, MAX_BLOCK_HEADERS as u64);
+	capacity
+}
+
+/// Segment index containing the next header after the given sync height.
+pub fn next_pihd_header_segment_idx(height: u64) -> u64 {
+	height / pihd_header_segment_capacity()
+}
+
+/// First header height covered by a PIHD header segment.
+pub fn pihd_header_segment_start_height(id: SegmentIdentifier) -> Option<u64> {
+	id.idx
+		.checked_mul(id.segment_capacity())
+		.and_then(|height| height.checked_add(1))
+}
+
+/// Last header height covered by a PIHD header segment.
+pub fn pihd_header_segment_end_height(id: SegmentIdentifier) -> Option<u64> {
+	id.idx
+		.checked_mul(id.segment_capacity())
+		.and_then(|height| height.checked_add(id.segment_capacity()))
+}
+
 #[derive(Debug)]
 pub enum Error {
 	Serialization(ser::Error),
