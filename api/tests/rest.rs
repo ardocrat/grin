@@ -1,3 +1,17 @@
+// Copyright 2026 The Grin Developers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use grin_api as api;
 use grin_util as util;
 
@@ -89,10 +103,7 @@ fn test_start_api() {
 	let index = request_with_retry(url.as_str()).unwrap();
 	assert_eq!(index.len(), 2);
 	assert_eq!(counter.value(), 1);
-	let rt = tokio::runtime::Runtime::new().unwrap();
-	rt.block_on(async {
-		assert!(server.stop().await);
-	});
+	assert!(server.stop());
 	thread::sleep(time::Duration::from_millis(1_000));
 }
 
@@ -118,10 +129,7 @@ fn test_start_api_tls() {
 	assert!(server.start(addr, router, Some(tls_conf), api_chan).is_ok());
 	let index = request_with_retry("https://yourdomain.com:14444/v1/").unwrap();
 	assert_eq!(index.len(), 2);
-	let rt = tokio::runtime::Runtime::new().unwrap();
-	rt.block_on(async {
-		assert!(server.stop().await);
-	});
+	assert!(server.stop())
 }
 
 fn request_with_retry(url: &str) -> Result<Vec<String>, Error> {

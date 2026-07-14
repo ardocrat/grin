@@ -163,9 +163,9 @@ impl ApiServer {
 	}
 
 	/// Stops the API server.
-	pub async fn stop(&mut self) -> bool {
+	pub fn stop(&mut self) -> bool {
 		if let Some(tx) = self.shutdown_sender.take() {
-			match tx.send(()).await {
+			match tx.try_send(()) {
 				Ok(_) => {
 					info!("API server has been stopped");
 					true
