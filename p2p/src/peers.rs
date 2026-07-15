@@ -63,10 +63,9 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
-		let enough_outbound = self.enough_outbound_peers();
 		let peer_data: PeerData;
 		{
-			// Scope for peers vector lock - dont hold the peers lock while adding to lmdb
+			// Scope for peers vector lock - don't hold the peers lock while adding to db.
 			let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
 				error!("add_connected: failed to get peers lock");
 				Error::Timeout
@@ -81,10 +80,8 @@ impl Peers {
 				last_connected: Utc::now().timestamp(),
 				last_attempt: Utc::now().timestamp(),
 			};
-			if !enough_outbound || !peer.info.is_outbound() {
-				debug!("Adding newly connected peer {}.", peer_data.addr);
-				peers.insert(peer_data.addr, peer);
-			}
+			debug!("Adding newly connected peer {}.", peer_data.addr);
+			peers.insert(peer_data.addr, peer);
 		}
 		// Do not save private peer.
 		if !is_private_ip(&peer_data.addr.0.ip()) {

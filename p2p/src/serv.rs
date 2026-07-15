@@ -209,6 +209,7 @@ impl Server {
 					&self.handshake,
 					self.peers.clone(),
 				)?;
+				let peer = Arc::new(peer);
 				if self.peers.enough_outbound_peers()
 					&& !self
 						.config
@@ -218,9 +219,9 @@ impl Server {
 						.matches_addr(&peer.info.addr)
 				{
 					peer.stop("enough outbound peers");
+				} else {
+					self.peers.add_connected(peer.clone())?;
 				}
-				let peer = Arc::new(peer);
-				self.peers.add_connected(peer.clone())?;
 				Ok(peer)
 			}
 			Err(e) => {
