@@ -188,7 +188,7 @@ impl Peers {
 				// setting peer status will get it removed at the next clean_peer
 				peer.send_ban_reason(ban_reason)?;
 				peer.set_banned();
-				peer.stop();
+				peer.stop("banning peer");
 				let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
 					error!("ban_peer: failed to get peers lock");
 					Error::PeerException
@@ -233,7 +233,7 @@ impl Peers {
 							break;
 						}
 					};
-					p.stop();
+					p.stop("error broadcast");
 					peers.remove(&p.info.addr);
 				}
 			}
@@ -295,7 +295,7 @@ impl Peers {
 				};
 				// Mark peer as defunct after ping failure.
 				let _ = self.update_state(p.info.addr, State::Defunct);
-				p.stop();
+				p.stop("Error pinging");
 				peers.remove(&p.info.addr);
 			}
 		}
@@ -464,7 +464,7 @@ impl Peers {
 				}
 			};
 			for addr in rm {
-				let _ = peers.get(&addr).map(|peer| peer.stop());
+				let _ = peers.get(&addr).map(|peer| peer.stop("clean peers"));
 				peers.remove(&addr);
 			}
 		}
@@ -473,7 +473,7 @@ impl Peers {
 	pub fn stop(&self) {
 		let mut peers = self.peers.write();
 		for peer in peers.values() {
-			peer.stop();
+			peer.stop("stop all peers");
 		}
 		for (_, peer) in peers.drain() {
 			peer.wait();
@@ -489,7 +489,7 @@ impl Peers {
 		match peers.remove(&peer_addr) {
 			Some(peer) => {
 				warn!("disconnecting peer {} ({})", peer_addr, reason);
-				peer.stop();
+				peer.stop("disconnect_peer");
 				Ok(())
 			}
 			None => Ok(()),

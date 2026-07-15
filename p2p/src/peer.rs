@@ -434,8 +434,8 @@ impl Peer {
 	}
 
 	/// Stops the peer
-	pub fn stop(&self) {
-		debug!("Stopping peer {:?}", self.info.addr);
+	pub fn stop(&self, reason: &str) {
+		debug!("Stopping peer {:?}, reason: {}", self.info.addr, reason);
 		match self.stop_handle.try_lock() {
 			Some(handle) => handle.stop(),
 			None => error!("can't get stop lock for peer"),
