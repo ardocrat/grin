@@ -295,7 +295,7 @@ impl Peers {
 				};
 				// Mark peer as defunct after ping failure.
 				let _ = self.update_state(p.info.addr, State::Defunct);
-				p.stop("Error pinging");
+				p.stop("ping error");
 				peers.remove(&p.info.addr);
 			}
 		}
@@ -489,7 +489,7 @@ impl Peers {
 		match peers.remove(&peer_addr) {
 			Some(peer) => {
 				warn!("disconnecting peer {} ({})", peer_addr, reason);
-				peer.stop("disconnect_peer");
+				peer.stop(reason);
 				Ok(())
 			}
 			None => Ok(()),
