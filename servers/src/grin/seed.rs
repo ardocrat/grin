@@ -238,11 +238,10 @@ fn monitor_peers(
 	// Attempt to connect to any preferred peers even if all outbound slots are full.
 	let peers_preferred = config.peers_preferred.as_ref().unwrap_or(&default_peers);
 	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
+	let connected_peers: Vec<_> = peers.iter().connected().into_iter().collect();
 	for preferred in peers_preferred.peers.iter() {
-		let connected = peers
+		let connected = connected_peers
 			.iter()
-			.connected()
-			.into_iter()
 			.any(|peer| preferred.matches_filter(&peer.info.addr));
 		if !peers_deny.matches_addr(preferred) && !connected {
 			let _ = tx.send(*preferred);
