@@ -219,6 +219,7 @@ impl Server {
 						.matches_addr(&peer.info.addr)
 				{
 					peer.stop("enough outbound peers");
+					self.peers.record_connected(&peer.info);
 				} else {
 					self.peers.add_connected(peer.clone())?;
 				}
