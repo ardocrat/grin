@@ -149,7 +149,7 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 					"SUCCESS - Performed Handshake with seed for {} at {}. {} - {:?}",
 					s, r, user_agent, p.info.capabilities
 				);
-				p.stop();
+				p.stop("resolved seed");
 				p.wait();
 				seed_result.success = true;
 				seed_result

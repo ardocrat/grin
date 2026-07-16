@@ -220,7 +220,6 @@ fn monitor_peers(
 	if !enough_outbound {
 		// loop over connected peers that can provide peer lists
 		// ask them for their list of peers
-		let mut connected_peers: Vec<PeerAddr> = vec![];
 		for p in peers
 			.iter()
 			.with_capabilities(p2p::Capabilities::PEER_LIST)
@@ -233,23 +232,21 @@ fn monitor_peers(
 				p.info.addr,
 			);
 			let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
-			connected_peers.push(p.info.addr)
-		}
-
-		// Attempt to connect to any preferred peers.
-		let peers_preferred = config.peers_preferred.as_ref().unwrap_or(&default_peers);
-		for p in peers_preferred.peers.iter() {
-			if !connected_peers.is_empty() {
-				if !connected_peers.contains(&p) {
-					let _ = tx.send(*p);
-				}
-			} else {
-				let _ = tx.send(*p);
-			}
 		}
 	}
 
+	// Attempt to connect to any preferred peers even if all outbound slots are full.
+	let peers_preferred = config.peers_preferred.as_ref().unwrap_or(&default_peers);
 	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
+	let connected_peers: Vec<_> = peers.iter().connected().into_iter().collect();
+	for preferred in peers_preferred.peers.iter() {
+		let connected = connected_peers
+			.iter()
+			.any(|peer| preferred.matches_filter(&peer.info.addr));
+		if !peers_deny.matches_addr(preferred) && !connected {
+			let _ = tx.send(*preferred);
+		}
+	}
 
 	// find some peers from our db
 	// and queue them up for a connection attempt

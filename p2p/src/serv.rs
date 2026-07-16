@@ -28,6 +28,7 @@ use crate::core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::handshake::Handshake;
+use crate::msg::PeerAddrs;
 use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
@@ -208,11 +209,20 @@ impl Server {
 					&self.handshake,
 					self.peers.clone(),
 				)?;
-				if self.peers.enough_outbound_peers() {
-					peer.stop();
-				}
 				let peer = Arc::new(peer);
-				self.peers.add_connected(peer.clone())?;
+				if self.peers.enough_outbound_peers()
+					&& !self
+						.config
+						.peers_preferred
+						.as_ref()
+						.unwrap_or(&PeerAddrs::default())
+						.matches_addr(&peer.info.addr)
+				{
+					peer.stop("enough outbound peers");
+					self.peers.record_connected(&peer.info);
+				} else {
+					self.peers.add_connected(peer.clone())?;
+				}
 				Ok(peer)
 			}
 			Err(e) => {
