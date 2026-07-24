@@ -148,7 +148,6 @@ impl ApiServer {
 				"Can't start API server, it's running already".to_string(),
 			));
 		}
-		self.shutdown_sender = Some(api_chan.0);
 
 		let _ = rustls::crypto::ring::default_provider().install_default();
 
@@ -169,10 +168,12 @@ impl ApiServer {
 			Some(conf) => Some(TlsAcceptor::from(conf.build_server_config()?)),
 			None => None,
 		};
-		thread::Builder::new()
+		let res = thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || start_server(listener, router, api_chan.1, tls))
-			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()))
+			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()));
+		self.shutdown_sender = Some(api_chan.0);
+		res
 	}
 
 	/// Stops the API server.
