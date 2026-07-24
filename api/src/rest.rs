@@ -154,7 +154,11 @@ impl ApiServer {
 
 		// Check if provided address is free.
 		let listener = match std::net::TcpListener::bind(addr) {
-			Ok(l) => l,
+			Ok(l) => {
+				l.set_nonblocking(true)
+					.map_err(|e| Error::Internal(format!("API listener binding error: {}", e)))?;
+				l
+			}
 			Err(e) => {
 				error!("API listener binding error: {}", e);
 				return Err(Error::Internal(e.to_string()));
