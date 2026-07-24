@@ -154,10 +154,7 @@ impl ApiServer {
 
 		// Check if provided address is free.
 		let listener = match std::net::TcpListener::bind(addr) {
-			Ok(l) => match TcpListener::from_std(l) {
-				Ok(l) => l,
-				Err(e) => return Err(Error::Internal(e.to_string())),
-			},
+			Ok(l) => l,
 			Err(e) => {
 				error!("API listener binding error: {}", e);
 				return Err(Error::Internal(e.to_string()));
@@ -195,11 +192,24 @@ impl ApiServer {
 }
 
 /// Start API server with optional TLS support.
-fn start_server(l: TcpListener, router: Router, rx: mpsc::Receiver<()>, tls: Option<TlsAcceptor>) {
+fn start_server(
+	l: std::net::TcpListener,
+	router: Router,
+	rx: mpsc::Receiver<()>,
+	tls: Option<TlsAcceptor>,
+) {
 	let server = async move {
 		let graceful = hyper_util::server::graceful::GracefulShutdown::new();
 		// When this signal completes, start shutdown.
 		let mut signal = std::pin::pin!(shutdown_signal(rx));
+
+		let l = match TcpListener::from_std(l) {
+			Ok(l) => l,
+			Err(e) => {
+				error!("HTTP API server error: {}", e);
+				return;
+			}
+		};
 
 		loop {
 			tokio::select! {
