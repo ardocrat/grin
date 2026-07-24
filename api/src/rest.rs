@@ -143,16 +143,6 @@ impl ApiServer {
 		conf: Option<TLSConfig>,
 		api_chan: (mpsc::Sender<()>, mpsc::Receiver<()>),
 	) -> Result<thread::JoinHandle<()>, Error> {
-		// Check if provided address is free.
-		{
-			match std::net::TcpListener::bind(addr) {
-				Ok(_) => {}
-				Err(e) => return Err(Error::Internal(e.to_string())),
-			}
-		}
-
-		let _ = rustls::crypto::ring::default_provider().install_default();
-
 		if self.shutdown_sender.is_some() {
 			return Err(Error::Internal(
 				"Can't start API server, it's running already".to_string(),
@@ -160,13 +150,27 @@ impl ApiServer {
 		}
 		self.shutdown_sender = Some(api_chan.0);
 
+		let _ = rustls::crypto::ring::default_provider().install_default();
+
+		// Check if provided address is free.
+		let listener = match std::net::TcpListener::bind(addr) {
+			Ok(l) => match TcpListener::from_std(l) {
+				Ok(l) => l,
+				Err(e) => return Err(Error::Internal(e.to_string())),
+			},
+			Err(e) => {
+				error!("API listener binding error: {}", e);
+				return Err(Error::Internal(e.to_string()));
+			}
+		};
+
 		let tls = match conf {
 			Some(conf) => Some(TlsAcceptor::from(conf.build_server_config()?)),
 			None => None,
 		};
 		thread::Builder::new()
 			.name("apis".to_string())
-			.spawn(move || start_server(addr, router, api_chan.1, tls))
+			.spawn(move || start_server(listener, router, api_chan.1, tls))
 			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()))
 	}
 
@@ -191,88 +195,75 @@ impl ApiServer {
 }
 
 /// Start API server with optional TLS support.
-fn start_server(
-	addr: SocketAddr,
-	router: Router,
-	rx: mpsc::Receiver<()>,
-	tls: Option<TlsAcceptor>,
-) {
+fn start_server(l: TcpListener, router: Router, rx: mpsc::Receiver<()>, tls: Option<TlsAcceptor>) {
 	let server = async move {
 		let graceful = hyper_util::server::graceful::GracefulShutdown::new();
 		// When this signal completes, start shutdown.
 		let mut signal = std::pin::pin!(shutdown_signal(rx));
 
-		// Start server loop.
-		match TcpListener::bind(addr).await {
-			Ok(l) => {
-				loop {
-					tokio::select! {
-						Ok(s) = async {
-							match l.accept().await {
-								Ok((s, _)) => Ok::<Option<tokio::net::TcpStream>, Error>(Some(s)),
-								Err(e) => {
-									error!("Failed to accept connection: {e:#}");
-									Ok(None)
-								}
-							}
-						} => {
-							if let Some(s) = s {
-								if let Some(tls) = tls.clone() {
-									let router = router.clone();
-									let watcher = graceful.watcher();
-									tokio::spawn(async move {
-										let handshake = timeout(TLS_HANDSHAKE_TIMEOUT, tls.accept(s));
-										let tls_stream = match handshake.await {
-											Ok(Ok(tls_stream)) => tls_stream,
-											Ok(Err(err)) => {
-												error!("failed to perform TLS handshake: {err:#}");
-												return;
-											}
-											Err(_) => {
-												error!("TLS handshake timed out");
-												return;
-											}
-										};
-										let io = TokioIo::new(tls_stream);
-										let conn = http1::Builder::new().serve_connection(io, router);
-										if let Err(e) = watcher.watch(conn).await {
-											error!("API TLS server error: {:?}", e);
-										}
-									});
-								} else {
-									let io = TokioIo::new(s);
-									let conn = http1::Builder::new().serve_connection(io, router.clone());
-									let fut = graceful.watch(conn);
-									tokio::spawn(async move {
-										if let Err(e) = fut.await {
-											error!("API HTTP server error: {:?}", e);
-										}
-									});
+		loop {
+			tokio::select! {
+				Ok(s) = async {
+					match l.accept().await {
+						Ok((s, _)) => Ok::<Option<tokio::net::TcpStream>, Error>(Some(s)),
+						Err(e) => {
+							error!("Failed to accept connection: {e:#}");
+							Ok(None)
+						}
+					}
+				} => {
+					if let Some(s) = s {
+						if let Some(tls) = tls.clone() {
+							let router = router.clone();
+							let watcher = graceful.watcher();
+							tokio::spawn(async move {
+								let handshake = timeout(TLS_HANDSHAKE_TIMEOUT, tls.accept(s));
+								let tls_stream = match handshake.await {
+									Ok(Ok(tls_stream)) => tls_stream,
+									Ok(Err(err)) => {
+										error!("failed to perform TLS handshake: {err:#}");
+										return;
+									}
+									Err(_) => {
+										error!("TLS handshake timed out");
+										return;
+									}
 								};
-							} else {
-								continue;
-							}
-						}
-						_ = &mut signal => {
-							drop(l);
-							break;
-						}
+								let io = TokioIo::new(tls_stream);
+								let conn = http1::Builder::new().serve_connection(io, router);
+								if let Err(e) = watcher.watch(conn).await {
+									error!("API TLS server error: {:?}", e);
+								}
+							});
+						} else {
+							let io = TokioIo::new(s);
+							let conn = http1::Builder::new().serve_connection(io, router.clone());
+							let fut = graceful.watch(conn);
+							tokio::spawn(async move {
+								if let Err(e) = fut.await {
+									error!("API HTTP server error: {:?}", e);
+								}
+							});
+						};
+					} else {
+						continue;
 					}
 				}
-
-				// Now start the shutdown and wait for them to complete
-				// Also start a timeout to limit how long to wait.
-				tokio::select! {
-					_ = graceful.shutdown() => {
-						warn!("API server gracefully stopped");
-					},
-					_ = sleep(GRACEFUL_SHUTDOWN_TIMEOUT) => {
-						warn!("API server timed out wait for all connections to close");
-					}
+				_ = &mut signal => {
+					drop(l);
+					break;
 				}
 			}
-			Err(e) => {
-				error!("API listener binding error: {}", e);
+		}
+
+		// Now start the shutdown and wait for them to complete
+		// Also start a timeout to limit how long to wait.
+		tokio::select! {
+			_ = graceful.shutdown() => {
+				warn!("API server gracefully stopped");
+			},
+			_ = sleep(GRACEFUL_SHUTDOWN_TIMEOUT) => {
+				warn!("API server timed out wait for all connections to close");
 			}
 		}
 	};
