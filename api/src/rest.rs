@@ -143,6 +143,14 @@ impl ApiServer {
 		conf: Option<TLSConfig>,
 		api_chan: (mpsc::Sender<()>, mpsc::Receiver<()>),
 	) -> Result<thread::JoinHandle<()>, Error> {
+		// Check if provided address is free.
+		{
+			match std::net::TcpListener::bind(addr) {
+				Ok(_) => {}
+				Err(e) => return Err(Error::Internal(e.to_string())),
+			}
+		}
+
 		let _ = rustls::crypto::ring::default_provider().install_default();
 
 		if self.shutdown_sender.is_some() {
