@@ -172,7 +172,9 @@ impl ApiServer {
 			.name("apis".to_string())
 			.spawn(move || start_server(listener, router, api_chan.1, tls))
 			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()));
-		self.shutdown_sender = Some(api_chan.0);
+		if !res.is_err() {
+			self.shutdown_sender = Some(api_chan.0);
+		}
 		res
 	}
 
