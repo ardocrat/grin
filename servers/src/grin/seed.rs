@@ -268,9 +268,11 @@ fn monitor_peers(
 	{
 		new_peers.push(hp.addr);
 	}
+	let healthy_count = new_peers.len();
+
 	// always check min 32 (max 96, if there are no healthy) random unknown peers received from peer list request.
 	let req_unk_count = cmp::max(
-		max_peer_attempts / 2 - new_peers.len() + max_peer_attempts / 4,
+		max_peer_attempts / 2 - healthy_count + max_peer_attempts / 4,
 		max_peer_attempts / 4,
 	);
 	for upa in unknown
@@ -280,15 +282,8 @@ fn monitor_peers(
 	{
 		new_peers.push(*upa);
 	}
-	debug!(
-		"monitor_peers: check {} healthy, {} unknown, {} defuncts",
-		cmp::min(
-			new_peers.len() as i32,
-			((new_peers.len() - req_unk_count) as i32).abs()
-		),
-		cmp::min(new_peers.len(), req_unk_count),
-		max_peer_attempts - new_peers.len()
-	);
+	let unk_count = new_peers.len() - healthy_count;
+
 	// check min 32 (max 128, if there are no healthy and unknown) random defunct peers no more often than 1 hour per peer.
 	for dp in defuncts
 		.iter()
@@ -301,6 +296,12 @@ fn monitor_peers(
 	{
 		new_peers.push(dp.addr);
 	}
+	let defuncts_count = new_peers.len() - unk_count - healthy_count;
+
+	debug!(
+		"monitor_peers: check {} healthy, {} unknown, {} defuncts",
+		healthy_count, unk_count, defuncts_count
+	);
 
 	// If the peer db is stale or mostly defunct, include seeds as recovery candidates.
 	if !enough_outbound {
