@@ -184,7 +184,7 @@ pub fn init_global_chain_type(new_type: ChainTypes) -> bool {
 
 /// Set the global chain_type using an override
 pub fn set_global_chain_type(new_type: ChainTypes) {
-	GLOBAL_CHAIN_TYPE.set(new_type);
+	GLOBAL_CHAIN_TYPE.set(new_type, true);
 }
 
 /// Set the chain type on a per-thread basis via thread_local storage.
@@ -216,25 +216,25 @@ pub fn get_genesis_block() -> Block {
 }
 
 /// One time initialization of the global future time limit
-/// Will panic if we attempt to re-initialize this (via OneTime).
+/// Returns `false` if already was initialized.
 pub fn init_global_future_time_limit(new_ftl: u64) -> bool {
 	GLOBAL_FUTURE_TIME_LIMIT.init_if_unset(new_ftl)
 }
 
 /// The global future time limit may be reset again using the override
 pub fn set_global_future_time_limit(new_ftl: u64) {
-	GLOBAL_FUTURE_TIME_LIMIT.set(new_ftl)
+	GLOBAL_FUTURE_TIME_LIMIT.set(new_ftl, true)
 }
 
 /// One time initialization of the global accept fee base
-/// Will panic if we attempt to re-initialize this (via OneTime).
+/// Returns `false` if already was initialized.
 pub fn init_global_accept_fee_base(new_base: u64) -> bool {
 	GLOBAL_ACCEPT_FEE_BASE.init_if_unset(new_base)
 }
 
 /// The global accept fee base may be reset using override.
 pub fn set_global_accept_fee_base(new_base: u64) {
-	GLOBAL_ACCEPT_FEE_BASE.set(new_base)
+	GLOBAL_ACCEPT_FEE_BASE.set(new_base, true)
 }
 
 /// Set the accept fee base on a per-thread basis via thread_local storage.
@@ -282,14 +282,14 @@ pub fn get_future_time_limit() -> u64 {
 }
 
 /// One time initialization of the global NRD feature flag.
-/// Will panic if we attempt to re-initialize this (via OneTime).
+/// Returns `false` if already was initialized.
 pub fn init_global_nrd_enabled(enabled: bool) -> bool {
 	GLOBAL_NRD_FEATURE_ENABLED.init_if_unset(enabled)
 }
 
 /// Set the global NRD feature flag using override.
 pub fn set_global_nrd_enabled(enabled: bool) {
-	GLOBAL_NRD_FEATURE_ENABLED.set(enabled)
+	GLOBAL_NRD_FEATURE_ENABLED.set(enabled, true)
 }
 
 /// Explicitly enable the local NRD feature flag.

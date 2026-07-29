@@ -830,8 +830,8 @@ where
 
 	/// Initialize a NetToChainAdaptor with reference to a Peers object.
 	/// Should only be called once.
-	pub fn init(&self, peers: Arc<p2p::Peers>) -> bool {
-		self.peers.init_if_unset(Arc::downgrade(&peers))
+	pub fn init(&self, peers: Arc<p2p::Peers>) {
+		self.peers.init(Arc::downgrade(&peers))
 	}
 
 	fn peers(&self) -> Arc<p2p::Peers> {
@@ -1396,8 +1396,8 @@ where
 
 	/// Initialize a ChainToPoolAndNetAdapter instance with handle to a Peers
 	/// object. Should only be called once.
-	pub fn init(&self, peers: Arc<p2p::Peers>) -> bool {
-		self.peers.init_if_unset(Arc::downgrade(&peers))
+	pub fn init(&self, peers: Arc<p2p::Peers>) {
+		self.peers.init(Arc::downgrade(&peers))
 	}
 
 	fn peers(&self) -> Arc<p2p::Peers> {
@@ -1488,8 +1488,8 @@ impl PoolToNetAdapter {
 	}
 
 	/// Setup the p2p server on the adapter
-	pub fn init(&self, peers: Arc<p2p::Peers>) -> bool {
-		self.peers.init_if_unset(Arc::downgrade(&peers))
+	pub fn init(&self, peers: Arc<p2p::Peers>) {
+		self.peers.init(Arc::downgrade(&peers))
 	}
 
 	fn peers(&self) -> Arc<p2p::Peers> {
@@ -1517,8 +1517,8 @@ impl PoolToChainAdapter {
 	}
 
 	/// Set the pool adapter's chain. Should only be called once.
-	pub fn set_chain(&self, chain_ref: Arc<chain::Chain>) -> bool {
-		self.chain.init_if_unset(Arc::downgrade(&chain_ref))
+	pub fn set_chain(&self, chain_ref: Arc<chain::Chain>) {
+		self.chain.init(Arc::downgrade(&chain_ref))
 	}
 
 	fn chain(&self) -> Arc<chain::Chain> {
