@@ -177,7 +177,7 @@ thread_local! {
 }
 
 /// One time initialization of the global chain_type.
-/// Will panic if we attempt to re-initialize this (via OneTime).
+/// Returns `false` if already was initialized.
 pub fn init_global_chain_type(new_type: ChainTypes) -> bool {
 	GLOBAL_CHAIN_TYPE.init_if_unset(new_type)
 }
