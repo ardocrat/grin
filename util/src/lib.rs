@@ -187,21 +187,17 @@ fn one_time() {
 	let one_time_parallel_clone1 = one_time_parallel.clone();
 	let mut handles = vec![];
 	handles.push(thread::spawn(move || {
-		one_time_parallel_clone1.init_if_unset(1)
+		(1, one_time_parallel_clone1.init_if_unset(1))
 	}));
 	let one_time_parallel_clone2 = one_time_parallel.clone();
 	handles.push(thread::spawn(move || {
-		one_time_parallel_clone2.init_if_unset(2)
+		(2, one_time_parallel_clone2.init_if_unset(2))
 	}));
-	let mut counter = 0;
-	for handle in handles {
-		let value = handle.join().unwrap();
-		if counter == 0 {
-			assert!(value);
-		} else {
-			assert!(!value);
-		}
-		counter += 1;
-	}
-	assert_eq!(one_time_parallel.borrow(), 1);
+	let results: Vec<_> = handles
+		.into_iter()
+		.map(|handle| handle.join().unwrap())
+		.collect();
+	assert_ne!(results[0].1, results[1].1);
+	let winner = results.iter().find(|result| result.1).unwrap().0;
+	assert_eq!(one_time_parallel.borrow(), winner);
 }
