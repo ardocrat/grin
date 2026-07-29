@@ -178,13 +178,13 @@ thread_local! {
 
 /// One time initialization of the global chain_type.
 /// Will panic if we attempt to re-initialize this (via OneTime).
-pub fn init_global_chain_type(new_type: ChainTypes) {
-	GLOBAL_CHAIN_TYPE.init(new_type)
+pub fn init_global_chain_type(new_type: ChainTypes) -> bool {
+	GLOBAL_CHAIN_TYPE.init_if_unset(new_type)
 }
 
 /// Set the global chain_type using an override
 pub fn set_global_chain_type(new_type: ChainTypes) {
-	GLOBAL_CHAIN_TYPE.set(new_type, true);
+	GLOBAL_CHAIN_TYPE.set(new_type);
 }
 
 /// Set the chain type on a per-thread basis via thread_local storage.
@@ -194,16 +194,15 @@ pub fn set_local_chain_type(new_type: ChainTypes) {
 
 /// Get the chain type via thread_local, fallback to global chain_type.
 pub fn get_chain_type() -> ChainTypes {
-	CHAIN_TYPE.with(|chain_type| match chain_type.get() {
-		None => {
+	CHAIN_TYPE.with(|chain_type| {
+		chain_type.get().unwrap_or_else(|| {
 			if !GLOBAL_CHAIN_TYPE.is_init() {
 				panic!("GLOBAL_CHAIN_TYPE and CHAIN_TYPE unset. Consider set_local_chain_type() in tests.");
 			}
 			let chain_type = GLOBAL_CHAIN_TYPE.borrow();
 			set_local_chain_type(chain_type);
 			chain_type
-		}
-		Some(chain_type) => chain_type,
+		})
 	})
 }
 
@@ -218,37 +217,37 @@ pub fn get_genesis_block() -> Block {
 
 /// One time initialization of the global future time limit
 /// Will panic if we attempt to re-initialize this (via OneTime).
-pub fn init_global_future_time_limit(new_ftl: u64) {
-	GLOBAL_FUTURE_TIME_LIMIT.init(new_ftl)
+pub fn init_global_future_time_limit(new_ftl: u64) -> bool {
+	GLOBAL_FUTURE_TIME_LIMIT.init_if_unset(new_ftl)
 }
 
 /// The global future time limit may be reset again using the override
 pub fn set_global_future_time_limit(new_ftl: u64) {
-	GLOBAL_FUTURE_TIME_LIMIT.set(new_ftl, true)
+	GLOBAL_FUTURE_TIME_LIMIT.set(new_ftl)
 }
 
 /// One time initialization of the global accept fee base
 /// Will panic if we attempt to re-initialize this (via OneTime).
-pub fn init_global_accept_fee_base(new_base: u64) {
-	GLOBAL_ACCEPT_FEE_BASE.init(new_base)
+pub fn init_global_accept_fee_base(new_base: u64) -> bool {
+	GLOBAL_ACCEPT_FEE_BASE.init_if_unset(new_base)
 }
 
 /// The global accept fee base may be reset using override.
 pub fn set_global_accept_fee_base(new_base: u64) {
-	GLOBAL_ACCEPT_FEE_BASE.set(new_base, true)
+	GLOBAL_ACCEPT_FEE_BASE.set(new_base)
 }
 
 /// Set the accept fee base on a per-thread basis via thread_local storage.
 pub fn set_local_accept_fee_base(new_base: u64) {
-	ACCEPT_FEE_BASE.with(|base| base.set(Some(new_base)))
+	ACCEPT_FEE_BASE.set(Some(new_base))
 }
 
 /// Accept Fee Base
 /// Look at thread local config first. If not set fallback to global config.
 /// Default to grin-cent/20 if global config unset.
 pub fn get_accept_fee_base() -> u64 {
-	ACCEPT_FEE_BASE.with(|base| match base.get() {
-		None => {
+	ACCEPT_FEE_BASE.with(|base| {
+		base.get().unwrap_or_else(|| {
 			let base = if GLOBAL_ACCEPT_FEE_BASE.is_init() {
 				GLOBAL_ACCEPT_FEE_BASE.borrow()
 			} else {
@@ -256,22 +255,21 @@ pub fn get_accept_fee_base() -> u64 {
 			};
 			set_local_accept_fee_base(base);
 			base
-		}
-		Some(base) => base,
+		})
 	})
 }
 
 /// Set the future time limit on a per-thread basis via thread_local storage.
 pub fn set_local_future_time_limit(new_ftl: u64) {
-	FUTURE_TIME_LIMIT.with(|ftl| ftl.set(Some(new_ftl)))
+	FUTURE_TIME_LIMIT.set(Some(new_ftl))
 }
 
 /// Future Time Limit (FTL)
 /// Look at thread local config first. If not set fallback to global config.
 /// Default to false if global config unset.
 pub fn get_future_time_limit() -> u64 {
-	FUTURE_TIME_LIMIT.with(|ftl| match ftl.get() {
-		None => {
+	FUTURE_TIME_LIMIT.with(|ftl| {
+		ftl.get().unwrap_or_else(|| {
 			let ftl = if GLOBAL_FUTURE_TIME_LIMIT.is_init() {
 				GLOBAL_FUTURE_TIME_LIMIT.borrow()
 			} else {
@@ -279,25 +277,24 @@ pub fn get_future_time_limit() -> u64 {
 			};
 			set_local_future_time_limit(ftl);
 			ftl
-		}
-		Some(ftl) => ftl,
+		})
 	})
 }
 
 /// One time initialization of the global NRD feature flag.
 /// Will panic if we attempt to re-initialize this (via OneTime).
-pub fn init_global_nrd_enabled(enabled: bool) {
-	GLOBAL_NRD_FEATURE_ENABLED.init(enabled)
+pub fn init_global_nrd_enabled(enabled: bool) -> bool {
+	GLOBAL_NRD_FEATURE_ENABLED.init_if_unset(enabled)
 }
 
 /// Set the global NRD feature flag using override.
 pub fn set_global_nrd_enabled(enabled: bool) {
-	GLOBAL_NRD_FEATURE_ENABLED.set(enabled, true)
+	GLOBAL_NRD_FEATURE_ENABLED.set(enabled)
 }
 
 /// Explicitly enable the local NRD feature flag.
 pub fn set_local_nrd_enabled(enabled: bool) {
-	NRD_FEATURE_ENABLED.with(|flag| flag.set(Some(enabled)))
+	NRD_FEATURE_ENABLED.set(Some(enabled))
 }
 
 /// Is the NRD feature flag enabled?

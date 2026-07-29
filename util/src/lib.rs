@@ -84,17 +84,19 @@ where
 	}
 
 	/// Initializes the OneTime, should only be called once after construction.
-	/// Will panic (via assert) if called more than once.
-	pub fn init(&self, value: T) {
-		self.set(value, false);
+	/// Returns `false` if already was initialized.
+	pub fn init_if_unset(&self, value: T) -> bool {
+		let mut inner = self.inner.write();
+		if inner.is_none() {
+			*inner = Some(value);
+			return true;
+		}
+		false
 	}
 
 	/// Allows the one time to be set again with an override.
-	pub fn set(&self, value: T, is_override: bool) {
+	pub fn set(&self, value: T) {
 		let mut inner = self.inner.write();
-		if !is_override {
-			assert!(inner.is_none());
-		}
 		*inner = Some(value);
 	}
 
