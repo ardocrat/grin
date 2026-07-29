@@ -51,6 +51,7 @@ pub mod macros;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+
 mod hex;
 pub use crate::hex::*;
 
@@ -172,4 +173,23 @@ impl StopState {
 	pub fn resume(&self) {
 		self.paused.store(false, Ordering::Relaxed)
 	}
+}
+
+#[test]
+fn one_time() {
+	use std::thread;
+
+	let one_time: OneTime<u8> = OneTime::new();
+	one_time.init(1);
+	assert!(!one_time.init_if_unset(2));
+
+	let one_time_parallel: OneTime<u8> = OneTime::new();
+	let one_time_parallel_clone1 = one_time_parallel.clone();
+	thread::spawn(move || {
+		assert!(one_time_parallel_clone1.init_if_unset(2));
+	});
+	let one_time_parallel_clone2 = one_time_parallel.clone();
+	thread::spawn(move || {
+		assert!(!one_time_parallel_clone2.init_if_unset(2));
+	});
 }
