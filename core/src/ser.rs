@@ -236,7 +236,9 @@ impl DeserializationMode {
 /// read from an underlying stream or container (depending on implementation).
 pub trait Reader {
 	/// Max size of data in single read.
-	fn read_limit(&self) -> Option<usize>;
+	fn read_limit(&self) -> Option<usize> {
+		Some(MAX_READ_SIZE)
+	}
 	/// The mode this reader is reading from
 	fn deserialization_mode(&self) -> DeserializationMode;
 	/// Read a u8 from the underlying Read
@@ -533,10 +535,6 @@ impl<'a, R: Read> Reader for BinReader<'a, R> {
 	fn protocol_version(&self) -> ProtocolVersion {
 		self.version
 	}
-
-	fn read_limit(&self) -> Option<usize> {
-		Some(MAX_READ_SIZE)
-	}
 }
 
 /// A reader that reads straight off a stream.
@@ -673,10 +671,6 @@ impl<'a, B: Buf> BufReader<'a, B> {
 }
 
 impl<'a, B: Buf> Reader for BufReader<'a, B> {
-	fn read_limit(&self) -> Option<usize> {
-		Some(MAX_READ_SIZE)
-	}
-
 	fn deserialization_mode(&self) -> DeserializationMode {
 		self.deser_mode
 	}
