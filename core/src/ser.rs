@@ -214,6 +214,8 @@ pub trait Writer {
 	}
 }
 
+const MAX_READ_SIZE: usize = 100_000;
+
 /// Signal to a deserializable object how much of its data should be deserialized
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum DeserializationMode {
@@ -533,7 +535,7 @@ impl<'a, R: Read> Reader for BinReader<'a, R> {
 	}
 
 	fn read_limit(&self) -> Option<usize> {
-		Some(100_000)
+		Some(MAX_READ_SIZE)
 	}
 }
 
@@ -672,7 +674,7 @@ impl<'a, B: Buf> BufReader<'a, B> {
 
 impl<'a, B: Buf> Reader for BufReader<'a, B> {
 	fn read_limit(&self) -> Option<usize> {
-		Some(100_000)
+		Some(MAX_READ_SIZE)
 	}
 
 	fn deserialization_mode(&self) -> DeserializationMode {
