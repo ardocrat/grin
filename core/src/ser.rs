@@ -221,6 +221,8 @@ pub enum DeserializationMode {
 	Full,
 	/// For Block Headers, skip reading proof
 	SkipPow,
+	/// Deserialize everything ignoring size limit
+	FullNoLimits,
 }
 
 impl DeserializationMode {
@@ -502,7 +504,7 @@ impl<'a, R: Read> Reader for BinReader<'a, R> {
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
 		// not reading more than 100k bytes in a single read
-		if len > 100_000 {
+		if self.deser_mode != DeserializationMode::FullNoLimits && len > 100_000 {
 			return Err(Error::TooLargeReadErr);
 		}
 		let mut buf = vec![0; len];
@@ -700,7 +702,7 @@ impl<'a, B: Buf> Reader for BufReader<'a, B> {
 
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
 		// not reading more than 100k bytes in a single read
-		if len > 100_000 {
+		if self.deser_mode != DeserializationMode::FullNoLimits && len > 100_000 {
 			return Err(Error::TooLargeReadErr);
 		}
 		self.has_remaining(len)?;
