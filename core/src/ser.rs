@@ -233,6 +233,8 @@ impl DeserializationMode {
 /// Implementations defined how different numbers and binary structures are
 /// read from an underlying stream or container (depending on implementation).
 pub trait Reader {
+	/// Max size of data in single read.
+	fn read_limit(&self) -> Option<usize>;
 	/// The mode this reader is reading from
 	fn deserialization_mode(&self) -> DeserializationMode;
 	/// Read a u8 from the underlying Read
@@ -501,9 +503,11 @@ impl<'a, R: Read> Reader for BinReader<'a, R> {
 
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
-		// not reading more than 100k bytes in a single read
-		if len > 100_000 {
-			return Err(Error::TooLargeReadErr);
+		// not reading more than limit in a single read
+		if let Some(limit) = self.read_limit() {
+			if len > limit {
+				return Err(Error::TooLargeReadErr);
+			}
 		}
 		let mut buf = vec![0; len];
 		self.source
@@ -526,6 +530,10 @@ impl<'a, R: Read> Reader for BinReader<'a, R> {
 
 	fn protocol_version(&self) -> ProtocolVersion {
 		self.version
+	}
+
+	fn read_limit(&self) -> Option<usize> {
+		Some(100_000)
 	}
 }
 
@@ -616,6 +624,10 @@ impl<'a> Reader for StreamingReader<'a> {
 	fn protocol_version(&self) -> ProtocolVersion {
 		self.version
 	}
+
+	fn read_limit(&self) -> Option<usize> {
+		None
+	}
 }
 
 /// Protocol version-aware wrapper around a `Buf` impl
@@ -659,6 +671,10 @@ impl<'a, B: Buf> BufReader<'a, B> {
 }
 
 impl<'a, B: Buf> Reader for BufReader<'a, B> {
+	fn read_limit(&self) -> Option<usize> {
+		Some(100_000)
+	}
+
 	fn deserialization_mode(&self) -> DeserializationMode {
 		self.deser_mode
 	}
@@ -699,9 +715,11 @@ impl<'a, B: Buf> Reader for BufReader<'a, B> {
 	}
 
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
-		// not reading more than 100k bytes in a single read
-		if len > 100_000 {
-			return Err(Error::TooLargeReadErr);
+		// not reading more than limit in a single read
+		if let Some(limit) = self.read_limit() {
+			if len > limit {
+				return Err(Error::TooLargeReadErr);
+			}
 		}
 		self.has_remaining(len)?;
 
