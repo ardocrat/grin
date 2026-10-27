@@ -49,12 +49,12 @@ extern crate chrono;
 extern crate regex;
 extern crate timer;
 
-use crate::tor::ov3::OnionV3Error;
-
 use crate::tor::config::{TorConfig, BOOTSTRAP_TIMEOUT_SECS};
+use crate::tor::ov3::OnionV3Error;
 use crate::tor::process::bridge::TorBridge;
 use crate::tor::process::config::{output_tor_listener_config, output_tor_sender_config};
 use crate::tor::process::proxy::TorProxy;
+
 use grin_util::secp::SecretKey;
 use regex::Regex;
 use std::collections::HashMap;
@@ -66,7 +66,6 @@ use std::path::{Path, MAIN_SEPARATOR};
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::mpsc::channel;
 use std::thread;
-use std::time::Duration;
 use std::{cmp, io};
 use sysinfo::{Process, ProcessExt, System, SystemExt};
 
@@ -139,14 +138,14 @@ impl TorProcess {
 
 		let mut process = TorProcess::new();
 		let tor_timeout = config
-			.bootstrap_timeout()
-			.unwrap_or(Duration::from_secs(BOOTSTRAP_TIMEOUT_SECS))
-			.as_secs();
+			.bootstrap_timeout_secs()
+			.filter(|s| *s > 0)
+			.unwrap_or(BOOTSTRAP_TIMEOUT_SECS);
 
 		let mut hm_tor_bridge: HashMap<String, String> = HashMap::new();
 		let bridge_config = config.bridge_config();
 		if bridge_config.bridge_line.is_some() {
-			let bridge_config = TorBridge::try_from(bridge_config)
+			let bridge_config = TorBridge::try_from(bridge_config.clone())
 				.map_err(|e| Error::Config(format!("{:?}", e)))?;
 			hm_tor_bridge = bridge_config
 				.to_hashmap()
@@ -156,8 +155,8 @@ impl TorProcess {
 		let mut hm_tor_poxy: HashMap<String, String> = HashMap::new();
 		let proxy_config = config.proxy_config();
 		if proxy_config.transport.is_some() || proxy_config.allowed_port.is_some() {
-			let proxy_config =
-				TorProxy::try_from(proxy_config).map_err(|e| Error::Config(format!("{:?}", e)))?;
+			let proxy_config = TorProxy::try_from(proxy_config.clone())
+				.map_err(|e| Error::Config(format!("{:?}", e)))?;
 			hm_tor_poxy = proxy_config
 				.to_hashmap()
 				.map_err(|e| Error::Config(format!("{:?}", e)))?;
@@ -179,8 +178,7 @@ impl TorProcess {
 	/// Start Tor process to send requests.
 	pub fn start_sender<T>(
 		config: &T,
-		socks_proxy_addr: String,
-		tor_dir: &Path,
+		socks_proxy_addr: &str,
 	) -> Result<TorProcess, crate::tor::types::Error>
 	where
 		T: TorConfig,
@@ -218,8 +216,10 @@ impl TorProcess {
 				.map_err(|e| Error::Config(format!("{:?}", e)))?;
 		}
 
+		let mut tor_dir = config.data_dir();
+		tor_dir.push("sender");
 		output_tor_sender_config(
-			tor_dir.to_str().unwrap(),
+			config.data_dir().to_str().unwrap(),
 			socks_proxy_addr.to_string().as_str(),
 			hm_tor_bridge,
 			hm_tor_proxy,
@@ -232,9 +232,9 @@ impl TorProcess {
 			.working_dir(tor_dir.to_str().unwrap())
 			.timeout(
 				config
-					.bootstrap_timeout()
-					.unwrap_or(Duration::from_secs(BOOTSTRAP_TIMEOUT_SECS))
-					.as_secs(),
+					.bootstrap_timeout_secs()
+					.filter(|s| *s > 0)
+					.unwrap_or(BOOTSTRAP_TIMEOUT_SECS),
 			)
 			.completion_percent(100)
 			.launch()
@@ -307,15 +307,15 @@ impl TorProcess {
 			tor.args(vec!["-f", torrc_path]);
 		}
 		let mut tor_process = tor
-            .args(&self.args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|err| {
-                let msg = format!("TOR executable (`{}`) not found. Please ensure TOR is installed and on the path: {:?}", TOR_EXE_NAME, err);
-                Error::Process(msg)
-            })?;
+			.args(&self.args)
+			.stdin(Stdio::piped())
+			.stdout(Stdio::piped())
+			.stderr(Stdio::piped())
+			.spawn()
+			.map_err(|err| {
+				let msg = format!("TOR executable (`{}`) not found. Please ensure TOR is installed and on the path: {:?}", TOR_EXE_NAME, err);
+				Error::Process(msg)
+			})?;
 
 		if let Some(ref d) = self.working_dir {
 			// Split out the process id, so if we don't exit cleanly

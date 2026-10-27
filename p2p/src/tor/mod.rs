@@ -16,4 +16,6 @@ pub mod arti;
 pub mod config;
 pub mod ov3;
 pub mod process;
-pub mod types;
+
+mod types;
+pub use self::types::*;

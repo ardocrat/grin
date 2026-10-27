@@ -128,8 +128,11 @@ pub fn stop_tor_service(onion_addr: String) -> Result<(), Error> {
 }
 
 /// Get state and cache data paths.
-fn state_cache_paths(tor_dir: String) -> (PathBuf, PathBuf) {
-	let mut tor_dir = PathBuf::from(tor_dir);
+fn state_cache_paths<T>(config: &T) -> (PathBuf, PathBuf)
+where
+	T: TorConfig,
+{
+	let mut tor_dir = config.data_dir();
 	tor_dir.push("arti");
 	let state_path = tor_dir.join("state");
 	let cache_path = tor_dir.join("cache");
@@ -137,18 +140,13 @@ fn state_cache_paths(tor_dir: String) -> (PathBuf, PathBuf) {
 }
 
 /// Start Tor service from provided key.
-pub fn start_tor_service<T>(
-	key: SecretKey,
-	addr: &str,
-	tor_dir: String,
-	config: &T,
-) -> Result<(), Error>
+pub fn start_tor_service<T>(key: SecretKey, addr: &str, config: &T) -> Result<(), Error>
 where
 	T: TorConfig,
 {
 	info!("Starting integrated Tor listener.");
 
-	let (state_path, cache_path) = state_cache_paths(tor_dir);
+	let (state_path, cache_path) = state_cache_paths(config);
 	let (client, config) = init_client(&state_path, &cache_path, config)?;
 
 	// Add service key to keystore.
@@ -218,13 +216,13 @@ where
 }
 
 /// Start Tor client to send requests.
-pub fn start_tor_client<T>(config: T, tor_dir: String) -> Result<(), Error>
+pub fn start_tor_client<T>(config: &T) -> Result<(), Error>
 where
 	T: TorConfig,
 {
 	info!("Starting integrated Tor client");
-	let (state_path, cache_path) = state_cache_paths(tor_dir);
-	let (_, _) = init_client(&state_path, &cache_path, &config)?;
+	let (state_path, cache_path) = state_cache_paths(config);
+	let (_, _) = init_client(&state_path, &cache_path, config)?;
 	Ok(())
 }
 
@@ -249,12 +247,7 @@ fn build_post_request(json: String, url: &Uri) -> Result<Request<Full<Bytes>>, E
 }
 
 /// Make POST request.
-pub fn tor_post<IN, T>(
-	config: &T,
-	tor_dir: String,
-	input: &IN,
-	url: &str,
-) -> Result<String, PostError>
+pub fn tor_post<IN, T>(config: &T, input: &IN, url: &str) -> Result<String, PostError>
 where
 	IN: Serialize,
 	T: TorConfig,
@@ -275,10 +268,13 @@ where
 	let port = url.port_u16().unwrap_or(80);
 	let request = build_post_request(json, &url)
 		.map_err(|e| PostError::NotSent(format!("Cannot build request: {}", e)))?;
-	let timeout = config
-		.request_timeout()
-		.unwrap_or(Duration::from_secs(REQUEST_TIMEOUT_SECS));
-	let (state_path, cache_path) = state_cache_paths(tor_dir);
+	let timeout = Duration::from_secs(
+		config
+			.request_timeout_secs()
+			.filter(|s| *s > 0)
+			.unwrap_or(REQUEST_TIMEOUT_SECS),
+	);
+	let (state_path, cache_path) = state_cache_paths(config);
 	let (client, _) = init_client(&state_path, &cache_path, config)
 		.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
 	let res: Result<String, PostError> = thread::spawn(move || {
@@ -432,9 +428,12 @@ where
 		.create_unbootstrapped()
 		.map_err(|e| Error::Generic(format!("{:?}", e)))?;
 	let c = client.clone();
-	let timeout = config
-		.bootstrap_timeout()
-		.unwrap_or(Duration::from_secs(BOOTSTRAP_TIMEOUT_SECS));
+	let timeout = Duration::from_secs(
+		config
+			.bootstrap_timeout_secs()
+			.filter(|s| *s > 0)
+			.unwrap_or(BOOTSTRAP_TIMEOUT_SECS),
+	);
 	let res = client.runtime().block_on(async move {
 		let bootstrap = async || {
 			return match c.bootstrap().await {

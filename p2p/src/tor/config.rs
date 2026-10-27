@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::fmt;
-use std::time::Duration;
+use std::path::PathBuf;
 
 /// Tor request timeout in seconds.
 pub const REQUEST_TIMEOUT_SECS: u64 = 60;
@@ -23,20 +23,26 @@ pub const BOOTSTRAP_TIMEOUT_SECS: u64 = 60;
 pub const MIN_CIRCUIT_TIMEOUT_MS: i32 = 60_000;
 
 pub trait TorConfig {
+	/// Whether to use integrated Tor library.
+	fn use_integrated(&self) -> bool;
+
 	/// Custom request timeout.
-	fn request_timeout(&self) -> Option<Duration>;
+	fn request_timeout_secs(&self) -> Option<u64>;
 
 	/// Custom bootstrap timeout.
-	fn bootstrap_timeout(&self) -> Option<Duration>;
+	fn bootstrap_timeout_secs(&self) -> Option<u64>;
 
 	/// Custom minimum Tor circuit build timeout in milliseconds.
 	fn min_circuit_timeout_ms(&self) -> Option<i32>;
 
 	/// Get bridge configuration.
-	fn bridge_config(&self) -> TorBridgeConfig;
+	fn bridge_config(&self) -> &TorBridgeConfig;
 
 	/// Get proxy configuration.
-	fn proxy_config(&self) -> TorProxyConfig;
+	fn proxy_config(&self) -> &TorProxyConfig;
+
+	/// Tor data directory.
+	fn data_dir(&self) -> PathBuf;
 }
 
 /// Tor Bridge Config
