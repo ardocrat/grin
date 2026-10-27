@@ -140,7 +140,12 @@ where
 }
 
 /// Start Tor service from provided key.
-pub fn start_tor_service<T>(key: SecretKey, addr: &str, config: &T) -> Result<(), Error>
+pub fn start_tor_service<T>(
+	key: SecretKey,
+	addr: &str,
+	keys_dir: PathBuf,
+	config: &T,
+) -> Result<(), Error>
 where
 	T: TorConfig,
 {
@@ -154,7 +159,7 @@ where
 		OnionV3Address::from_private(&key.0).map_err(|e| Error::Config(format!("{:?}", e)))?;
 	let hs = HsNickname::new(onion_address.to_string())
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
-	let keystore_path = Path::new(&state_path).join("keystore");
+	let keystore_path = Path::new(&keys_dir).join("keystore");
 	// Arti 0.44 uses this lock to finish stopping a service before it can start again.
 	let state_lock = state_path
 		.join("hss")

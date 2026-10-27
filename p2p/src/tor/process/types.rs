@@ -62,7 +62,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::io::{BufRead, BufReader};
 use std::net::SocketAddr;
-use std::path::{Path, MAIN_SEPARATOR};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::mpsc::channel;
 use std::thread;
@@ -126,9 +126,9 @@ impl TorProcess {
 	/// Start Tor process as listener.
 	pub fn start_listener<T>(
 		sec_key: SecretKey,
-		tor_dir: String,
+		mut tor_dir: PathBuf,
 		addr: &str,
-		config: T,
+		config: &T,
 	) -> Result<TorProcess, crate::tor::types::Error>
 	where
 		T: TorConfig,
@@ -162,12 +162,20 @@ impl TorProcess {
 				.map_err(|e| Error::Config(format!("{:?}", e)))?;
 		}
 
-		output_tor_listener_config(&tor_dir, addr, &[sec_key], hm_tor_bridge, hm_tor_poxy)
-			.map_err(|e| Error::Config(format!("{:?}", e)))?;
+		tor_dir.push("listener");
+		output_tor_listener_config(
+			tor_dir.to_str().unwrap(),
+			addr,
+			&[sec_key],
+			hm_tor_bridge,
+			hm_tor_poxy,
+		)
+		.map_err(|e| Error::Config(format!("{:?}", e)))?;
 		// Start TOR process
+		let rc_path = tor_dir.join("torrc");
 		process
-			.torrc_path(&format!("{}/torrc", tor_dir))
-			.working_dir(&tor_dir)
+			.torrc_path(rc_path.to_str().unwrap())
+			.working_dir(tor_dir.to_str().unwrap())
 			.timeout(tor_timeout)
 			.completion_percent(100)
 			.launch()
@@ -176,10 +184,7 @@ impl TorProcess {
 	}
 
 	/// Start Tor process to send requests.
-	pub fn start_sender<T>(
-		config: &T,
-		socks_proxy_addr: &str,
-	) -> Result<TorProcess, crate::tor::types::Error>
+	pub fn start_sender<T>(config: &T) -> Result<TorProcess, crate::tor::types::Error>
 	where
 		T: TorConfig,
 	{
@@ -187,7 +192,8 @@ impl TorProcess {
 
 		let mut tor = TorProcess::new();
 		let socks_proxy_addr = SocketAddr::V4(
-			socks_proxy_addr
+			config
+				.socks_proxy_addr()
 				.parse()
 				.map_err(|e| Error::Config(format!("{:?}", e)))?,
 		);
@@ -219,16 +225,17 @@ impl TorProcess {
 		let mut tor_dir = config.data_dir();
 		tor_dir.push("sender");
 		output_tor_sender_config(
-			config.data_dir().to_str().unwrap(),
+			tor_dir.to_str().unwrap(),
 			socks_proxy_addr.to_string().as_str(),
 			hm_tor_bridge,
 			hm_tor_proxy,
 		)
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
+
 		// Start TOR process
-		let mut path = tor_dir.to_path_buf();
-		path.push("torrc");
-		tor.torrc_path(path.to_str().unwrap())
+		let mut rc_path = tor_dir.to_path_buf();
+		rc_path.push("torrc");
+		tor.torrc_path(rc_path.to_str().unwrap())
 			.working_dir(tor_dir.to_str().unwrap())
 			.timeout(
 				config

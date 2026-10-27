@@ -43,6 +43,9 @@ pub trait TorConfig {
 
 	/// Tor data directory.
 	fn data_dir(&self) -> PathBuf;
+
+	/// Tor data directory.
+	fn socks_proxy_addr(&self) -> String;
 }
 
 /// Tor Bridge Config

@@ -12,7 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::tor::arti::{start_tor_client, start_tor_service};
+use crate::tor::config::TorConfig;
+use crate::tor::process::types::TorProcess;
+
 use ed25519_dalek::hazmat::ExpandedSecretKey;
+use grin_util::secp::SecretKey;
+use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -45,4 +51,50 @@ pub(crate) fn exp_sec_key_bytes(expanded_sk: ExpandedSecretKey) -> [u8; 64] {
 	sk_bytes[0..32].copy_from_slice(&expanded_sk.scalar.to_bytes());
 	sk_bytes[32..64].copy_from_slice(&expanded_sk.hash_prefix);
 	sk_bytes
+}
+
+/// Start integrated Tor client or external process to send. Integrated Tor will reuse same client.
+pub fn start_tor<T>(config: &T) -> Result<Option<TorProcess>, Error>
+where
+	T: TorConfig,
+{
+	let tor = if config.use_integrated() {
+		start_tor_client(config)?;
+		None
+	} else {
+		let p = TorProcess::start_sender(config)?;
+		Some(p)
+	};
+	Ok(tor)
+}
+
+/// Start Tor service from provided key to forward requests to
+/// provided address and store keys data at provided dir.
+pub fn start_onion_service<T>(
+	sec_key: SecretKey,
+	addr: &str,
+	dir: PathBuf,
+	config: &T,
+) -> Result<Option<TorProcess>, Error>
+where
+	T: TorConfig,
+{
+	let res: Result<Option<TorProcess>, Error> = if config.use_integrated() {
+		match start_tor_service(sec_key, addr, dir, config) {
+			Ok(_) => Ok(None),
+			Err(e) => {
+				error!("Error starting Tor service with integrated client: {}", e);
+				Err(e)
+			}
+		}
+	} else {
+		match TorProcess::start_listener(sec_key, dir, addr, config) {
+			Ok(p) => Ok(Some(p)),
+			Err(e) => {
+				error!("Error starting Tor service with external process: {}", e);
+				Err(e)
+			}
+		}
+	};
+	res
 }
