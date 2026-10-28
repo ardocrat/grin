@@ -49,7 +49,7 @@ use tor_hsservice::config::OnionServiceConfigBuilder;
 use tor_hsservice::{
 	HsIdKeypairSpecifier, HsIdPublicKeySpecifier, HsNickname, RunningOnionService,
 };
-use tor_keymgr::config::CfgPath;
+use tor_keymgr::config::{ArtiKeystoreKind, CfgPath};
 use tor_keymgr::{ArtiNativeKeystore, KeyMgrBuilder, KeystoreSelector};
 use tor_llcrypto::pk::ed25519::ExpandedKeypair;
 use tor_rtcompat::tokio::TokioNativeTlsRuntime;
@@ -394,6 +394,13 @@ where
 			}
 		}
 	}
+	builder
+		.storage()
+		.keystore()
+		.primary()
+		.kind(tor_config::ExplicitOrAuto::Explicit(
+			ArtiKeystoreKind::Ephemeral,
+		));
 	let arti_config = builder
 		.build()
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
