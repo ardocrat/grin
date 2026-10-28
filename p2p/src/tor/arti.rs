@@ -160,7 +160,7 @@ where
 	let hs = HsNickname::new(onion_address.to_string())
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
 	let keystore_path = Path::new(&keys_dir).join("keystore");
-	// Arti 0.44 uses this lock to finish stopping a service before it can start again.
+	// Arti uses this lock to finish stopping a service before it can start again.
 	let state_lock = state_path
 		.join("hss")
 		.join(format!("{}.lock", onion_address));
