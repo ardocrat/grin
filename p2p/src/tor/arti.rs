@@ -18,6 +18,8 @@ use crate::tor::config::{
 use crate::tor::ov3::OnionV3Address;
 use crate::tor::types::{exp_sec_key_bytes, Error, PostError};
 
+use grin_util::secp::SecretKey;
+
 use arti_client::config::pt::TransportConfigBuilder;
 use arti_client::config::{BridgeConfigBuilder, TorClientConfigBuilder};
 use arti_client::{TorClient, TorClientConfig};
@@ -26,12 +28,10 @@ use ed25519_dalek::hazmat::ExpandedSecretKey;
 use ed25519_dalek::Digest;
 use fs_mistrust::Mistrust;
 use fslock_guard::LockFileGuard;
-use grin_util::secp::SecretKey;
 use http_body_util::{BodyExt, Full};
 use hyper::{Request, Uri};
 use hyper_util::rt::TokioIo;
 use lazy_static::lazy_static;
-use serde::Serialize;
 use sha2::Sha512;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -231,8 +231,12 @@ where
 	Ok(())
 }
 
-/// Build an origin-form JSON POST request
-fn build_post_request(json: String, url: &Uri) -> Result<Request<Full<Bytes>>, Error> {
+/// Build an origin-form POST request
+fn build_post_request(
+	body: String,
+	headers: Option<HashMap<&str, &str>>,
+	url: &Uri,
+) -> Result<Request<Full<Bytes>>, Error> {
 	let authority = url
 		.authority()
 		.ok_or_else(|| Error::Generic(format!("URL {} has bad authority", url)))?;
@@ -241,24 +245,27 @@ fn build_post_request(json: String, url: &Uri) -> Result<Request<Full<Bytes>>, E
 		.map(|path| path.as_str())
 		.unwrap_or("/");
 
-	Request::builder()
-		.uri(request_target)
-		.method("POST")
-		.header("host", authority.as_str())
-		.header("accept", "application/json")
-		.header("content-type", "application/json")
-		.body(Full::from(json))
+	let mut req = Request::builder().uri(request_target).method("POST");
+	if let Some(headers) = headers {
+		for (k, v) in headers {
+			req = req.header(k, v);
+		}
+	}
+	req.header("host", authority.as_str())
+		.body(Full::from(body))
 		.map_err(|e| Error::Generic(format!("{:?}", e)))
 }
 
 /// Make POST request.
-pub fn tor_post<IN, T>(config: &T, input: &IN, url: &str) -> Result<String, PostError>
+pub fn tor_post<T>(
+	config: &T,
+	body: String,
+	headers: Option<HashMap<&str, &str>>,
+	url: &str,
+) -> Result<String, PostError>
 where
-	IN: Serialize,
 	T: TorConfig,
 {
-	let json = serde_json::to_string(input)
-		.map_err(|_| PostError::NotSent("Could not serialize data to JSON".to_owned()))?;
 	let url = url.to_string();
 	let url: Uri = url
 		.parse()
@@ -271,7 +278,7 @@ where
 	}
 	.to_string();
 	let port = url.port_u16().unwrap_or(80);
-	let request = build_post_request(json, &url)
+	let request = build_post_request(body, headers, &url)
 		.map_err(|e| PostError::NotSent(format!("Cannot build request: {}", e)))?;
 	let timeout = Duration::from_secs(
 		config
@@ -353,11 +360,6 @@ fn init_client<T>(
 where
 	T: TorConfig,
 {
-	let use_proxy =
-		config.proxy_config().transport.is_some() && config.proxy_config().address.is_some();
-	if use_proxy {
-		info!("Proxy configuration will be ignored.");
-	}
 	let mut builder = TorClientConfigBuilder::from_directories(state_path, cache_path);
 	builder.address_filter().allow_onion_addrs(true);
 	// Circuit timeout minimum applies to listeners and sends too
@@ -565,16 +567,18 @@ fn add_service_key(
 mod tests {
 	use super::build_post_request;
 	use hyper::{Method, Uri};
+	use std::collections::HashMap;
 
 	#[test]
-	fn builds_origin_form_json_request() {
+	fn builds_origin_form_request() {
 		let url: Uri = "http://example.onion:8080/v1?test=1".parse().unwrap();
-		let request = build_post_request("{}".to_string(), &url).unwrap();
+		let mut headers = HashMap::new();
+		headers.insert("key", "value");
+		let request = build_post_request("{}".to_string(), Some(headers), &url).unwrap();
 
 		assert_eq!(request.method(), Method::POST);
 		assert_eq!(request.uri(), "/v1?test=1");
 		assert_eq!(request.headers()["host"], "example.onion:8080");
-		assert_eq!(request.headers()["accept"], "application/json");
-		assert_eq!(request.headers()["content-type"], "application/json");
+		assert_eq!(request.headers()["key"], "value");
 	}
 }
