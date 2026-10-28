@@ -18,6 +18,7 @@ use crate::tor::process::types::TorProcess;
 
 use ed25519_dalek::hazmat::ExpandedSecretKey;
 use grin_util::secp::SecretKey;
+use hyper::StatusCode;
 use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
@@ -42,7 +43,7 @@ pub enum PostError {
 	NotSent(String),
 	/// Hyper started sending the request, so delivery cannot be ruled out.
 	#[error("Possibly sent: {0}")]
-	PossiblySent(String),
+	PossiblySent(String, Option<StatusCode>, Option<String>),
 }
 
 /// Convert expanded secret key to byte array (works for both external Tor process and Arti).

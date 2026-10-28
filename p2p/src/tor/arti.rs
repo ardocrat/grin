@@ -317,29 +317,29 @@ where
 					let resp = request_sender
 						.send_request(request)
 						.await
-						.map_err(|e| PostError::PossiblySent(format!("{:?}", e)))?;
+						.map_err(|e| PostError::PossiblySent(format!("{:?}", e), None, None))?;
 
 					let status = resp.status();
-					let body_resp = resp
-						.into_body()
-						.collect()
-						.await
-						.map_err(|e| PostError::PossiblySent(format!("{:?}", e)))?;
+					let body_resp = resp.into_body().collect().await.map_err(|e| {
+						PostError::PossiblySent(format!("{:?}", e), Some(status), None)
+					})?;
 					let body = body_resp.to_bytes().into();
-					let body_text = String::from_utf8(body)
-						.map_err(|e| PostError::PossiblySent(format!("{:?}", e)))?;
+					let body_text = String::from_utf8(body).map_err(|e| {
+						PostError::PossiblySent(format!("{:?}", e), Some(status), None)
+					})?;
 					if !status.is_success() {
-						return Err(PostError::PossiblySent(format!(
-							"HTTP request failed with status {}: {}",
-							status, body_text
-						)));
+						return Err(PostError::PossiblySent(
+							format!("HTTP request failed with status {}: {}", status, body_text),
+							Some(status),
+							Some(body_text),
+						));
 					}
 					Ok(body_text)
 				})
 				.await;
 			match res {
 				Err(e) if send_started.load(Ordering::Acquire) => {
-					Err(PostError::PossiblySent(format!("{:?}", e)))
+					Err(PostError::PossiblySent(format!("{:?}", e), None, None))
 				}
 				Err(e) => Err(PostError::NotSent(format!("{:?}", e))),
 				Ok(body) => Ok(body),
@@ -347,7 +347,7 @@ where
 		})
 	})
 	.join()
-	.unwrap_or_else(|e| Err(PostError::PossiblySent(format!("{:?}", e))))?;
+	.unwrap_or_else(|e| Err(PostError::PossiblySent(format!("{:?}", e), None, None)))?;
 	res
 }
 
