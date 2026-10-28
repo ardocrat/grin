@@ -44,7 +44,7 @@ pub trait TorConfig {
 	/// Tor data directory.
 	fn data_dir(&self) -> PathBuf;
 
-	/// Tor data directory.
+	/// The address of the socks proxy for external process.
 	fn socks_proxy_addr(&self) -> String;
 }
 
