@@ -45,6 +45,7 @@ mod peers;
 mod protocol;
 mod serv;
 pub mod store;
+#[cfg(feature = "tor")]
 pub mod tor;
 pub mod types;
 
