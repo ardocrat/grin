@@ -353,6 +353,11 @@ fn init_client<T>(
 where
 	T: TorConfig,
 {
+	let use_proxy =
+		config.proxy_config().transport.is_some() && config.proxy_config().address.is_some();
+	if use_proxy {
+		info!("Proxy configuration will be ignored.");
+	}
 	let mut builder = TorClientConfigBuilder::from_directories(state_path, cache_path);
 	builder.address_filter().allow_onion_addrs(true);
 	// Circuit timeout minimum applies to listeners and sends too
