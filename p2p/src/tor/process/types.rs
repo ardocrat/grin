@@ -163,19 +163,16 @@ impl TorProcess {
 		}
 
 		tor_dir.push("listener");
-		output_tor_listener_config(
-			tor_dir.to_str().unwrap(),
-			addr,
-			&[sec_key],
-			hm_tor_bridge,
-			hm_tor_poxy,
-		)
-		.map_err(|e| Error::Config(format!("{:?}", e)))?;
+		let tor_dir_str = tor_dir
+			.to_str()
+			.ok_or(Error::Config(format!("Bad tor dir {}", tor_dir.display())))?;
+		output_tor_listener_config(tor_dir_str, addr, &[sec_key], hm_tor_bridge, hm_tor_poxy)
+			.map_err(|e| Error::Config(format!("{:?}", e)))?;
 		// Start TOR process
 		let rc_path = tor_dir.join("torrc");
 		process
 			.torrc_path(rc_path.to_str().unwrap())
-			.working_dir(tor_dir.to_str().unwrap())
+			.working_dir(tor_dir_str)
 			.timeout(tor_timeout)
 			.completion_percent(100)
 			.launch()
@@ -224,8 +221,11 @@ impl TorProcess {
 
 		let mut tor_dir = config.data_dir();
 		tor_dir.push("sender");
+		let tor_dir_str = tor_dir
+			.to_str()
+			.ok_or(Error::Config(format!("Bad tor dir {}", tor_dir.display())))?;
 		output_tor_sender_config(
-			tor_dir.to_str().unwrap(),
+			tor_dir_str,
 			socks_proxy_addr.to_string().as_str(),
 			hm_tor_bridge,
 			hm_tor_proxy,
@@ -236,7 +236,7 @@ impl TorProcess {
 		let mut rc_path = tor_dir.to_path_buf();
 		rc_path.push("torrc");
 		tor.torrc_path(rc_path.to_str().unwrap())
-			.working_dir(tor_dir.to_str().unwrap())
+			.working_dir(tor_dir_str)
 			.timeout(
 				config
 					.bootstrap_timeout_secs()
