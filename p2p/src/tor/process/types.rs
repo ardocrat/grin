@@ -104,13 +104,7 @@ pub struct TorProcess {
 
 impl Default for TorProcess {
 	fn default() -> Self {
-		Self::new()
-	}
-}
-
-impl TorProcess {
-	pub fn new() -> Self {
-		TorProcess {
+		Self {
 			tor_cmd: TOR_EXE_NAME.to_string(),
 			args: vec![],
 			torrc_path: None,
@@ -122,7 +116,9 @@ impl TorProcess {
 			sys: System::new(),
 		}
 	}
+}
 
+impl TorProcess {
 	/// Start Tor process as listener.
 	pub fn start_listener<T>(
 		sec_key: SecretKey,
@@ -136,48 +132,20 @@ impl TorProcess {
 		use crate::tor::types::Error;
 		info!("Starting external Tor Process listener at {}.", addr);
 
-		let mut process = TorProcess::new();
-		let tor_timeout = config
-			.bootstrap_timeout_secs()
-			.filter(|s| *s > 0)
-			.unwrap_or(BOOTSTRAP_TIMEOUT_SECS);
+		let mut tor = TorProcess::default();
 
-		let mut hm_tor_bridge: HashMap<String, String> = HashMap::new();
-		let bridge_config = config.bridge_config();
-		if bridge_config.bridge_line.is_some() {
-			let bridge_config = TorBridge::try_from(bridge_config.clone())
-				.map_err(|e| Error::Config(format!("{:?}", e)))?;
-			hm_tor_bridge = bridge_config
-				.to_hashmap()
-				.map_err(|e| Error::Config(format!("{:?}", e)))?;
-		}
-
-		let mut hm_tor_poxy: HashMap<String, String> = HashMap::new();
-		let proxy_config = config.proxy_config();
-		if proxy_config.transport.is_some() || proxy_config.allowed_port.is_some() {
-			let proxy_config = TorProxy::try_from(proxy_config.clone())
-				.map_err(|e| Error::Config(format!("{:?}", e)))?;
-			hm_tor_poxy = proxy_config
-				.to_hashmap()
-				.map_err(|e| Error::Config(format!("{:?}", e)))?;
-		}
+		let (hm_tor_bridge, hm_tor_proxy) = bridge_proxy(config)?;
 
 		tor_dir.push("listener");
 		let tor_dir_str = tor_dir
 			.to_str()
 			.ok_or(Error::Config(format!("Bad tor dir {}", tor_dir.display())))?;
-		output_tor_listener_config(tor_dir_str, addr, &[sec_key], hm_tor_bridge, hm_tor_poxy)
+		output_tor_listener_config(tor_dir_str, addr, &[sec_key], hm_tor_bridge, hm_tor_proxy)
 			.map_err(|e| Error::Config(format!("{:?}", e)))?;
+
 		// Start TOR process
-		let rc_path = tor_dir.join("torrc");
-		process
-			.torrc_path(rc_path.to_str().unwrap())
-			.working_dir(tor_dir_str)
-			.timeout(tor_timeout)
-			.completion_percent(100)
-			.launch()
-			.map_err(|e| Error::Generic(format!("{:?}", e)))?;
-		Ok(process)
+		start_tor(tor_dir_str, &mut tor, config)?;
+		Ok(tor)
 	}
 
 	/// Start Tor process to send requests.
@@ -187,37 +155,19 @@ impl TorProcess {
 	{
 		use crate::tor::types::Error;
 
-		let mut tor = TorProcess::new();
 		let socks_proxy_addr = SocketAddr::V4(
 			config
 				.socks_proxy_addr()
 				.parse()
 				.map_err(|e| Error::Config(format!("{:?}", e)))?,
 		);
+		let mut tor = TorProcess::default();
 		info!(
 			"Starting external Tor process to send at {:?}.",
 			socks_proxy_addr
 		);
 
-		let mut hm_tor_bridge: HashMap<String, String> = HashMap::new();
-		let bridge_config = config.bridge_config();
-		if bridge_config.bridge_line.is_some() {
-			let bridge_struct = TorBridge::try_from(bridge_config.clone())
-				.map_err(|e| Error::Config(format!("{:?}", e)))?;
-			hm_tor_bridge = bridge_struct
-				.to_hashmap()
-				.map_err(|e| Error::Config(format!("{:?}", e)))?;
-		}
-
-		let mut hm_tor_proxy: HashMap<String, String> = HashMap::new();
-		let proxy_config = config.proxy_config();
-		if proxy_config.transport.is_some() || proxy_config.allowed_port.is_some() {
-			let proxy = TorProxy::try_from(proxy_config.clone())
-				.map_err(|e| Error::Config(format!("{:?}", e)))?;
-			hm_tor_proxy = proxy
-				.to_hashmap()
-				.map_err(|e| Error::Config(format!("{:?}", e)))?;
-		}
+		let (hm_tor_bridge, hm_tor_proxy) = bridge_proxy(config)?;
 
 		let mut tor_dir = config.data_dir();
 		tor_dir.push("sender");
@@ -233,19 +183,7 @@ impl TorProcess {
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
 
 		// Start TOR process
-		let mut rc_path = tor_dir.to_path_buf();
-		rc_path.push("torrc");
-		tor.torrc_path(rc_path.to_str().unwrap())
-			.working_dir(tor_dir_str)
-			.timeout(
-				config
-					.bootstrap_timeout_secs()
-					.filter(|s| *s > 0)
-					.unwrap_or(BOOTSTRAP_TIMEOUT_SECS),
-			)
-			.completion_percent(100)
-			.launch()
-			.map_err(|e| Error::Generic(format!("{:?}", e)))?;
+		start_tor(tor_dir_str, &mut tor, config)?;
 		Ok(tor)
 	}
 
@@ -422,6 +360,54 @@ impl TorProcess {
 			Err(Error::ProcessNotStarted)
 		}
 	}
+}
+
+type BridgeProxyResult =
+	Result<(HashMap<String, String>, HashMap<String, String>), crate::tor::types::Error>;
+
+fn bridge_proxy<T>(config: &T) -> BridgeProxyResult
+where
+	T: TorConfig,
+{
+	let mut hm_tor_bridge: HashMap<String, String> = HashMap::new();
+	let bridge_config = config.bridge_config();
+	if bridge_config.bridge_line.is_some() {
+		let bridge_struct = TorBridge::try_from(bridge_config.clone())
+			.map_err(|e| crate::tor::Error::Config(format!("{:?}", e)))?;
+		hm_tor_bridge = bridge_struct
+			.to_hashmap()
+			.map_err(|e| crate::tor::Error::Config(format!("{:?}", e)))?;
+	}
+
+	let mut hm_tor_proxy: HashMap<String, String> = HashMap::new();
+	let proxy_config = config.proxy_config();
+	if proxy_config.transport.is_some() || proxy_config.allowed_port.is_some() {
+		let proxy = TorProxy::try_from(proxy_config.clone())
+			.map_err(|e| crate::tor::Error::Config(format!("{:?}", e)))?;
+		hm_tor_proxy = proxy
+			.to_hashmap()
+			.map_err(|e| crate::tor::Error::Config(format!("{:?}", e)))?;
+	}
+	Ok((hm_tor_bridge, hm_tor_proxy))
+}
+
+fn start_tor<T>(tor_dir: &str, tor: &mut TorProcess, config: &T) -> Result<(), crate::tor::Error>
+where
+	T: TorConfig,
+{
+	let rc_path = PathBuf::from(tor_dir).join("torrc");
+	tor.torrc_path(rc_path.to_str().unwrap())
+		.working_dir(tor_dir)
+		.timeout(
+			config
+				.bootstrap_timeout_secs()
+				.filter(|s| *s > 0)
+				.unwrap_or(BOOTSTRAP_TIMEOUT_SECS),
+		)
+		.completion_percent(100)
+		.launch()
+		.map_err(|e| crate::tor::Error::Generic(format!("{:?}", e)))?;
+	Ok(())
 }
 
 impl Drop for TorProcess {
