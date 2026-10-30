@@ -49,7 +49,7 @@ use tor_hsservice::config::OnionServiceConfigBuilder;
 use tor_hsservice::{
 	HsIdKeypairSpecifier, HsIdPublicKeySpecifier, HsNickname, RunningOnionService,
 };
-use tor_keymgr::config::{ArtiKeystoreKind, CfgPath};
+use tor_keymgr::config::CfgPath;
 use tor_keymgr::{ArtiNativeKeystore, KeyMgrBuilder, KeystoreSelector};
 use tor_llcrypto::pk::ed25519::ExpandedKeypair;
 use tor_rtcompat::tokio::TokioNativeTlsRuntime;
@@ -140,12 +140,7 @@ where
 }
 
 /// Start Tor service from provided key.
-pub fn start_tor_service<T>(
-	key: SecretKey,
-	addr: &str,
-	keys_dir: PathBuf,
-	config: &T,
-) -> Result<(), Error>
+pub fn start_tor_service<T>(key: SecretKey, addr: &str, config: &T) -> Result<(), Error>
 where
 	T: TorConfig,
 {
@@ -159,7 +154,7 @@ where
 		OnionV3Address::from_private(&key.0).map_err(|e| Error::Config(format!("{:?}", e)))?;
 	let hs = HsNickname::new(onion_address.to_string())
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
-	let keystore_path = Path::new(&keys_dir).join("keystore");
+	let keystore_path = Path::new(&state_path).join("keystore");
 	// Arti uses this lock to finish stopping a service before it can start again.
 	let state_lock = state_path
 		.join("hss")
@@ -401,13 +396,6 @@ where
 			}
 		}
 	}
-	builder
-		.storage()
-		.keystore()
-		.primary()
-		.kind(tor_config::ExplicitOrAuto::Explicit(
-			ArtiKeystoreKind::Ephemeral,
-		));
 	let arti_config = builder
 		.build()
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;

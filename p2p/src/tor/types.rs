@@ -70,7 +70,7 @@ where
 }
 
 /// Start Tor service from provided key to forward requests to
-/// provided address and store keys data at provided dir.
+/// provided address and store listener data at provided dir for process.
 pub fn start_onion_service<T>(
 	sec_key: SecretKey,
 	addr: &str,
@@ -81,7 +81,7 @@ where
 	T: TorConfig,
 {
 	let res: Result<Option<TorProcess>, Error> = if config.use_integrated() {
-		match start_tor_service(sec_key, addr, dir, config) {
+		match start_tor_service(sec_key, addr, config) {
 			Ok(_) => Ok(None),
 			Err(e) => {
 				error!("Error starting Tor service with integrated client: {}", e);
