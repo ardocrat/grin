@@ -51,11 +51,13 @@ pub enum PostError {
 	PossiblySent(String, Option<StatusCode>, Option<String>),
 }
 
-/// Onion service status.
+/// Onion service status
+#[derive(Debug, Clone)]
 pub enum ServiceStatus {
 	Starting,
 	Running,
 	Errored(Error),
+	Stopped,
 }
 
 /// Convert expanded secret key to byte array (works for both external Tor process and Arti).
@@ -154,4 +156,13 @@ where
 		}
 	}
 	res
+}
+
+/// Get status of onion service.
+pub fn onion_service_status(onion_address: String) -> ServiceStatus {
+	let service_statuses = SERVICE_STATUS.lock().unwrap();
+	match service_statuses.get(&onion_address) {
+		None => ServiceStatus::Stopped,
+		Some(s) => s.clone(),
+	}
 }

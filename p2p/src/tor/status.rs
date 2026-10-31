@@ -16,7 +16,7 @@ use crate::tor::{Error, ServiceStatus, SERVICE_STATUS};
 
 use futures::StreamExt;
 use std::time::{Duration, Instant};
-use tor_hsservice::status::{Problem as OnionServiceProblem, State as OnionServiceState, State};
+use tor_hsservice::status::{Problem as OnionServiceProblem, State as OnionServiceState};
 use tor_hsservice::RunningOnionService;
 use tor_rtcompat::{Runtime, SleepProviderExt, SpawnExt};
 
@@ -115,7 +115,7 @@ where
 				// Keep checking while the status stays unchanged
 				match timer.timeout(Duration::from_secs(30), statuses.next()).await {
 					Ok(Some(next)) => {
-						if next.state() == State::Running {
+						if next.state().is_fully_reachable() {
 							SERVICE_STATUS.lock().unwrap().insert(onion_address.clone(), ServiceStatus::Running);
 						}
 						if format!("{next:?}") != format!("{status:?}") {
