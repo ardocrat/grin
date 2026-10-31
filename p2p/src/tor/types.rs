@@ -14,14 +14,19 @@
 
 use crate::tor::arti::{start_tor_client, start_tor_service};
 use crate::tor::config::TorConfig;
+use crate::tor::ov3::OnionV3Address;
 use crate::tor::process::types::TorProcess;
 
-use ed25519_dalek::hazmat::ExpandedSecretKey;
 use grin_util::secp::SecretKey;
-use hyper::StatusCode;
-use std::path::PathBuf;
 
-#[derive(Debug, thiserror::Error)]
+use ed25519_dalek::hazmat::ExpandedSecretKey;
+use hyper::StatusCode;
+use lazy_static::lazy_static;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{LazyLock, Mutex};
+
+#[derive(Debug, thiserror::Error, Clone)]
 pub enum Error {
 	/// Generic Tor error
 	#[error("Tor Process Error: {0}")]
@@ -36,7 +41,7 @@ pub enum Error {
 
 /// Failure from a POST HTTP request over Tor, classified by whether delivery may
 /// have started.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone)]
 pub enum PostError {
 	/// The failure happened before handing the request to Hyper.
 	#[error("Not sent: {0}")]
@@ -46,12 +51,26 @@ pub enum PostError {
 	PossiblySent(String, Option<StatusCode>, Option<String>),
 }
 
+/// Onion service status.
+pub enum ServiceStatus {
+	Starting,
+	Running,
+	Errored(Error),
+}
+
 /// Convert expanded secret key to byte array (works for both external Tor process and Arti).
 pub(crate) fn exp_sec_key_bytes(expanded_sk: ExpandedSecretKey) -> [u8; 64] {
 	let mut sk_bytes = [0_u8; 64];
 	sk_bytes[0..32].copy_from_slice(&expanded_sk.scalar.to_bytes());
 	sk_bytes[32..64].copy_from_slice(&expanded_sk.hash_prefix);
 	sk_bytes
+}
+
+/// Get onion address from key.
+pub fn service_address(key: &SecretKey) -> Result<String, Error> {
+	let onion_address =
+		OnionV3Address::from_private(&key.0).map_err(|e| Error::Config(format!("{:?}", e)))?;
+	Ok(onion_address.to_string())
 }
 
 /// Start integrated Tor client or external process to send. Integrated Tor will reuse same client.
@@ -69,6 +88,12 @@ where
 	Ok(tor)
 }
 
+lazy_static! {
+		/// Statuses on onion services, where key is onion address.
+		pub (crate) static ref SERVICE_STATUS: LazyLock<Mutex<HashMap<String, ServiceStatus>>> =
+		LazyLock::new(|| Mutex::new(HashMap::new()));
+}
+
 /// Start Tor service from provided key to forward requests to
 /// provided address and store listener data at provided dir for process.
 pub fn start_onion_service<T>(
@@ -80,6 +105,25 @@ pub fn start_onion_service<T>(
 where
 	T: TorConfig,
 {
+	let onion_address = service_address(&sec_key)?;
+	{
+		let mut service_statuses = SERVICE_STATUS.lock().unwrap();
+		match service_statuses.get(&onion_address) {
+			None => {
+				service_statuses.insert(onion_address.clone(), ServiceStatus::Starting);
+			}
+			Some(s) => match s {
+				ServiceStatus::Errored(_) => {
+					warn!("Restarting errored Tor service {}", onion_address);
+				}
+				_ => {
+					let error = format!("Tor service {} already started", onion_address);
+					warn!("{}", error);
+					return Err(Error::Generic(error));
+				}
+			},
+		}
+	}
 	let res: Result<Option<TorProcess>, Error> = if config.use_integrated() {
 		match start_tor_service(sec_key, addr, config) {
 			Ok(_) => Ok(None),
@@ -97,5 +141,15 @@ where
 			}
 		}
 	};
+
+	let mut service_statuses = SERVICE_STATUS.lock().unwrap();
+	match &res {
+		Ok(_) => {
+			service_statuses.insert(onion_address, ServiceStatus::Running);
+		}
+		Err(e) => {
+			service_statuses.insert(onion_address, ServiceStatus::Errored(e.clone()));
+		}
+	}
 	res
 }

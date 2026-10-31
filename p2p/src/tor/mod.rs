@@ -19,3 +19,6 @@ pub mod process;
 
 mod types;
 pub use self::types::*;
+
+mod status;
+pub use self::status::spawn_status_logger;

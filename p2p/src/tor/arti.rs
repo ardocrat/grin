@@ -15,8 +15,8 @@
 use crate::tor::config::{
 	TorConfig, BOOTSTRAP_TIMEOUT_SECS, MIN_CIRCUIT_TIMEOUT_MS, REQUEST_TIMEOUT_SECS,
 };
-use crate::tor::ov3::OnionV3Address;
 use crate::tor::types::{exp_sec_key_bytes, Error, PostError};
+use crate::tor::{service_address, spawn_status_logger, SERVICE_STATUS};
 
 use grin_util::secp::SecretKey;
 
@@ -108,6 +108,8 @@ pub fn stop_tor_service(onion_addr: String) -> Result<(), Error> {
 		error!("Service {} to stop was not found", onion_addr);
 		return Ok(());
 	};
+	SERVICE_STATUS.lock().unwrap().remove(&onion_addr);
+
 	let TorService {
 		service,
 		proxy,
@@ -150,10 +152,9 @@ where
 	let (client, config) = init_client(&state_path, &cache_path, config)?;
 
 	// Add service key to keystore.
-	let onion_address =
-		OnionV3Address::from_private(&key.0).map_err(|e| Error::Config(format!("{:?}", e)))?;
-	let hs = HsNickname::new(onion_address.to_string())
-		.map_err(|e| Error::Config(format!("{:?}", e)))?;
+	let onion_address = service_address(&key)?;
+	let hs =
+		HsNickname::new(onion_address.clone()).map_err(|e| Error::Config(format!("{:?}", e)))?;
 	let keystore_path = Path::new(&state_path).join("keystore");
 	// Arti uses this lock to finish stopping a service before it can start again.
 	let state_lock = state_path
@@ -169,13 +170,15 @@ where
 	let (service, proxy, worker) = match client.launch_onion_service(service_config) {
 		Ok(res) => {
 			if let Some((service, mut request)) = res {
+				spawn_status_logger(client.runtime(), &service, onion_address.to_string())?;
+
+				// Launch service proxy.
 				let addr: SocketAddr = addr
 					.parse()
 					.map_err(|e| Error::Generic(format!("{:?}", e)))?;
 				let proxy = create_service_proxy(addr)?;
 				let c = client.clone();
 				let p = proxy.clone();
-				// Launch service proxy.
 				let worker = thread::spawn(move || {
 					c.clone().runtime().block_on(async move {
 						loop {

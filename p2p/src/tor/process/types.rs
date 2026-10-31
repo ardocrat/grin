@@ -54,6 +54,7 @@ use crate::tor::ov3::OnionV3Error;
 use crate::tor::process::bridge::TorBridge;
 use crate::tor::process::config::{output_tor_listener_config, output_tor_sender_config};
 use crate::tor::process::proxy::TorProxy;
+use crate::tor::{service_address, SERVICE_STATUS};
 
 use grin_util::secp::SecretKey;
 use regex::Regex;
@@ -100,6 +101,7 @@ pub struct TorProcess {
 	pub stdout: Option<BufReader<ChildStdout>>,
 	pub process: Option<Child>,
 	sys: System,
+	onion_address: Option<String>,
 }
 
 impl Default for TorProcess {
@@ -114,6 +116,7 @@ impl Default for TorProcess {
 			stdout: None,
 			process: None,
 			sys: System::new(),
+			onion_address: None,
 		}
 	}
 }
@@ -133,6 +136,8 @@ impl TorProcess {
 		info!("Starting external Tor Process listener at {}.", addr);
 
 		let mut tor = TorProcess::default();
+		let onion_address = service_address(&sec_key)?;
+		tor.onion_address = Some(onion_address.clone());
 
 		let (hm_tor_bridge, hm_tor_proxy) = bridge_proxy(config)?;
 
@@ -415,5 +420,8 @@ impl Drop for TorProcess {
 	fn drop(&mut self) {
 		debug!("Dropping TOR process");
 		self.kill().unwrap_or(());
+		if let Some(a) = &self.onion_address {
+			SERVICE_STATUS.lock().unwrap().remove(a);
+		}
 	}
 }
