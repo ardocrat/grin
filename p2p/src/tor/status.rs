@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::Error;
+use crate::tor::{Error, ServiceStatus, SERVICE_STATUS};
+
 use futures::StreamExt;
 use std::time::{Duration, Instant};
-use tor_hsservice::status::{Problem as OnionServiceProblem, State as OnionServiceState};
+use tor_hsservice::status::{Problem as OnionServiceProblem, State as OnionServiceState, State};
 use tor_hsservice::RunningOnionService;
 use tor_rtcompat::{Runtime, SleepProviderExt, SpawnExt};
 
@@ -95,33 +96,36 @@ where
 	let mut status = service.status();
 	let timer = runtime.clone();
 	runtime
-        .spawn(async move {
-            let mut monitor = StatusLog::default();
-            loop {
-                let state = status.state();
-                let problem = status.current_problem().and_then(onion_service_problem);
-                if let Some((level, elapsed)) = monitor.update(state, problem, Instant::now()) {
-                    if level == log::Level::Info {
-                        info!("Onion service recovered after {}s at http://{onion_address}.onion", elapsed.as_secs());
-                    } else {
-                        log::log!(level, "Onion service reports {state:?} after {}s of problems at http://{onion_address}.onion; latest problem: {}",
+		.spawn(async move {
+			let mut monitor = StatusLog::default();
+			loop {
+				let state = status.state();
+				let problem = status.current_problem().and_then(onion_service_problem);
+				if let Some((level, elapsed)) = monitor.update(state, problem, Instant::now()) {
+					if level == log::Level::Info {
+						info!("Onion service recovered after {}s at http://{onion_address}.onion", elapsed.as_secs());
+					} else {
+						log::log!(level, "Onion service reports {state:?} after {}s of problems at http://{onion_address}.onion; latest problem: {}",
 							elapsed.as_secs(), monitor.problem.as_deref().unwrap_or("no details reported"));
-                    }
-                }
-                // Keep checking while the status stays unchanged
-                match timer.timeout(Duration::from_secs(30), statuses.next()).await {
-                    Ok(Some(next)) => {
-                        debug!("Onion service status at http://{onion_address}.onion: {next:?}");
-                        status = next;
-                    }
-                    Ok(None) => break,
-                    Err(_) => {}
-                }
-            }
-        })
-        .map_err(|error| {
-            Error::Generic(format!("Could not monitor Onion service: {error}"))
-        })?;
+					}
+				}
+				// Keep checking while the status stays unchanged
+				match timer.timeout(Duration::from_secs(30), statuses.next()).await {
+					Ok(Some(next)) => {
+						if next.state() == State::Running {
+							SERVICE_STATUS.lock().unwrap().insert(onion_address.clone(), ServiceStatus::Running);
+						}
+						debug!("Onion service status at http://{onion_address}.onion: {next:?}");
+						status = next;
+					}
+					Ok(None) => break,
+					Err(_) => {}
+				}
+			}
+		})
+		.map_err(|error| {
+			Error::Generic(format!("Could not monitor Onion service: {error}"))
+		})?;
 	Ok(())
 }
 

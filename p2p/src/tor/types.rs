@@ -145,7 +145,9 @@ where
 	let mut service_statuses = SERVICE_STATUS.lock().unwrap();
 	match &res {
 		Ok(_) => {
-			service_statuses.insert(onion_address, ServiceStatus::Running);
+			if !config.use_integrated() {
+				service_statuses.insert(onion_address, ServiceStatus::Running);
+			}
 		}
 		Err(e) => {
 			service_statuses.insert(onion_address, ServiceStatus::Errored(e.clone()));
