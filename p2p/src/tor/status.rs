@@ -93,7 +93,10 @@ where
 	R: Runtime,
 {
 	let mut statuses = service.status_events();
+
 	let mut status = service.status();
+	debug!("Onion service status at http://{onion_address}.onion: {status:?}");
+
 	let timer = runtime.clone();
 	runtime
 		.spawn(async move {
@@ -115,7 +118,9 @@ where
 						if next.state() == State::Running {
 							SERVICE_STATUS.lock().unwrap().insert(onion_address.clone(), ServiceStatus::Running);
 						}
-						debug!("Onion service status at http://{onion_address}.onion: {next:?}");
+						if format!("{next:?}") != format!("{status:?}") {
+							debug!("Onion service status at http://{onion_address}.onion: {next:?}");
+						}
 						status = next;
 					}
 					Ok(None) => break,
